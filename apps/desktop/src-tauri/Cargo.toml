@@ -1,0 +1,27 @@
+[package]
+name = "visual_library_desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Visual Library Tauri desktop shell"
+authors.workspace = true
+
+[lib]
+name = "visual_library_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+visual_library_domain = { workspace = true }
+visual_library_application = { workspace = true }
+visual_library_infrastructure = { workspace = true }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

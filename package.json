@@ -1,0 +1,27 @@
+{
+  "name": "visual-library",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Visual Library — local concept-centric visual resource library",
+  "scripts": {
+    "dev": "pnpm --filter @visual-library/desktop dev",
+    "build": "pnpm --filter @visual-library/desktop build",
+    "dev:ui": "pnpm --filter @visual-library/ui dev",
+    "build:ui": "pnpm --filter @visual-library/ui build",
+    "tauri": "pnpm --filter @visual-library/desktop tauri",
+    "test": "pnpm test:ui && pnpm test:rust",
+    "test:ui": "pnpm --filter @visual-library/ui test",
+    "test:e2e": "pnpm --filter @visual-library/ui test:e2e",
+    "test:e2e:install": "pnpm --filter @visual-library/ui test:e2e:install",
+    "test:rust": "cargo test --workspace",
+    "fmt:rust": "cargo fmt --all",
+    "fmt:rust:check": "cargo fmt --all -- --check",
+    "check:rust": "cargo check --workspace",
+    "quality:rust": "cargo fmt --all && cargo check --workspace && cargo test --workspace",
+    "quality": "pnpm fmt:rust:check && pnpm check:rust && pnpm test:rust && pnpm test:ui && pnpm build:ui"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@8.15.1"
+}

@@ -1,0 +1,139 @@
+[[permission]]
+identifier = "allow-health"
+description = "Allow health smoke command"
+commands.allow = ["health"]
+
+[[permission]]
+identifier = "allow-get-app-paths"
+description = "Allow reading app data layout paths"
+commands.allow = ["get_app_paths"]
+
+[[permission]]
+identifier = "allow-get-settings"
+description = "Allow reading settings"
+commands.allow = ["get_settings"]
+
+[[permission]]
+identifier = "allow-set-media-root"
+description = "Allow updating media_root setting"
+commands.allow = ["set_media_root"]
+
+[[permission]]
+identifier = "allow-validate-media-root-cmd"
+description = "Allow validating media_root path"
+commands.allow = ["validate_media_root_cmd"]
+
+[[permission]]
+identifier = "allow-list-themes-cmd"
+description = "Allow listing themes"
+commands.allow = ["list_themes_cmd"]
+
+[[permission]]
+identifier = "allow-ensure-theme-cmd"
+description = "Allow ensure theme"
+commands.allow = ["ensure_theme_cmd"]
+
+[[permission]]
+identifier = "allow-list-concepts-cmd"
+description = "Allow listing concepts"
+commands.allow = ["list_concepts_cmd"]
+
+[[permission]]
+identifier = "allow-ensure-concept-cmd"
+description = "Allow ensure concept"
+commands.allow = ["ensure_concept_cmd"]
+
+[[permission]]
+identifier = "allow-list-representations-cmd"
+description = "Allow listing representations"
+commands.allow = ["list_representations_cmd"]
+
+[[permission]]
+identifier = "allow-ensure-representation-cmd"
+description = "Allow ensure representation"
+commands.allow = ["ensure_representation_cmd"]
+
+[[permission]]
+identifier = "allow-generate-stub-asset-cmd"
+description = "Allow stub generation into waiting_review"
+commands.allow = ["generate_stub_asset_cmd"]
+
+[[permission]]
+identifier = "allow-list-waiting-review-cmd"
+description = "Allow listing waiting review assets"
+commands.allow = ["list_waiting_review_cmd"]
+
+[[permission]]
+identifier = "allow-list-library-assets-cmd"
+description = "Allow listing approved library assets"
+commands.allow = ["list_library_assets_cmd"]
+
+[[permission]]
+identifier = "allow-approve-asset-cmd"
+description = "Allow approving an asset"
+commands.allow = ["approve_asset_cmd"]
+
+[[permission]]
+identifier = "allow-reject-asset-cmd"
+description = "Allow rejecting an asset"
+commands.allow = ["reject_asset_cmd"]
+
+[[permission]]
+identifier = "allow-preview-manual-batch-cmd"
+description = "Allow Manual Factory preview FOUND/GENERATE"
+commands.allow = ["preview_manual_batch_cmd"]
+
+[[permission]]
+identifier = "allow-submit-manual-batch-cmd"
+description = "Allow Manual Factory submit generate"
+commands.allow = ["submit_manual_batch_cmd"]
+
+[[permission]]
+identifier = "allow-create-plan-cmd"
+description = "Allow creating coverage plans"
+commands.allow = ["create_plan_cmd"]
+
+[[permission]]
+identifier = "allow-list-plans-cmd"
+description = "Allow listing coverage plans"
+commands.allow = ["list_plans_cmd"]
+
+[[permission]]
+identifier = "allow-get-plan-cmd"
+description = "Allow get plan with items"
+commands.allow = ["get_plan_cmd"]
+
+[[permission]]
+identifier = "allow-add-plan-item-cmd"
+description = "Allow adding plan items"
+commands.allow = ["add_plan_item_cmd"]
+
+[[permission]]
+identifier = "allow-approve-plan-cmd"
+description = "Allow approving a plan"
+commands.allow = ["approve_plan_cmd"]
+
+[[permission]]
+identifier = "allow-run-automatic-plan-cmd"
+description = "Allow Automatic Factory from plan"
+commands.allow = ["run_automatic_plan_cmd"]
+
+[[permission]]
+identifier = "allow-edit-asset-metadata-cmd"
+description = "Allow edit asset metadata in review"
+commands.allow = ["edit_asset_metadata_cmd"]
+
+[[permission]]
+identifier = "allow-mark-duplicate-cmd"
+description = "Allow mark asset as duplicate"
+commands.allow = ["mark_duplicate_cmd"]
+
+[[permission]]
+identifier = "allow-regenerate-asset-cmd"
+description = "Allow regenerate asset"
+commands.allow = ["regenerate_asset_cmd"]
+
+[[permission]]
+identifier = "allow-get-coverage-report-cmd"
+description = "Allow coverage report"
+commands.allow = ["get_coverage_report_cmd"]

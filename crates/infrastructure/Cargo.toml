@@ -1,0 +1,21 @@
+[package]
+name = "visual_library_infrastructure"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Infrastructure adapters (SQLite, FS, jobs) for Visual Library"
+
+[dependencies]
+visual_library_domain = { workspace = true }
+visual_library_application = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+name = "visual_library_infrastructure"
+path = "src/lib.rs"

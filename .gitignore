@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+target/
+**/src-tauri/target/
+
+# Logs / caches
+*.log
+.npm
+.eslintcache
+*.tsbuildinfo
+.vite/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# App user data (never commit)
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Tauri / generated
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/WixTools/
+
+# Test / coverage reports (not the product Coverage station under src/)
+/coverage/
+.nyc_output/
+tarpaulin-report.html
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Misc
+*.local
+.turbo/
