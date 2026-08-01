@@ -75,6 +75,39 @@ mod tests {
     }
 
     #[test]
+    fn recover_running_jobs_on_bootstrap_path() {
+        use visual_library_application::ports::jobs::JobStore;
+        use visual_library_application::JobDto;
+
+        let dir = tempfile::tempdir().unwrap();
+        let platform = bootstrap(dir.path().to_path_buf()).unwrap();
+        let db = platform.settings.as_ref();
+        let job = JobDto {
+            id: "job_stuck".into(),
+            job_type: "generate_asset".into(),
+            payload_json: "{}".into(),
+            status: "running".into(),
+            priority: 1,
+            attempts: 1,
+            max_attempts: 3,
+            last_error: None,
+            related_entity_type: None,
+            related_entity_id: None,
+            idempotency_key: Some("recover-test".into()),
+            outputs_json: None,
+            created_at: "t0".into(),
+            updated_at: "t0".into(),
+            started_at: Some("t0".into()),
+            finished_at: None,
+        };
+        db.insert(&job).unwrap();
+        let n = db.recover_running_jobs().unwrap();
+        assert_eq!(n, 1);
+        let again = db.get("job_stuck").unwrap().unwrap();
+        assert_eq!(again.status, "queued");
+    }
+
+    #[test]
     fn generate_stub_then_approve_to_library() {
         use visual_library_application::{
             approve_asset, ensure_concept, ensure_representation, generate_stub_asset,
@@ -101,8 +134,10 @@ mod tests {
                 concept_id: concept.id.clone(),
                 representation_id: rep.id.clone(),
                 prompt: Some("stub".into()),
+                provider: Some("stub".into()),
                 idempotency_key: Some("k1".into()),
             },
+            &mut visual_library_application::IntegrationConfig::default(),
         )
         .unwrap();
 
@@ -126,8 +161,10 @@ mod tests {
                 concept_id: concept.id,
                 representation_id: rep.id,
                 prompt: None,
+                provider: Some("stub".into()),
                 idempotency_key: Some("k2".into()),
             },
+            &mut visual_library_application::IntegrationConfig::default(),
         )
         .unwrap();
         reject_asset(db, &gen2.asset_id, Some("nope")).unwrap();

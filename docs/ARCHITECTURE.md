@@ -14,9 +14,9 @@ Sin implementación en este documento.
 | Shell | **Tauri 2** (`apps/desktop`) |
 | Core | **Rust** workspace |
 | UI | **React 19 + Vite 6 + TypeScript** (`packages/ui`) |
-| Metadata | **SQLite** (diseñado; no en código aún) |
-| Bytes | **Filesystem administrado** |
-| Jobs | Durable en SQLite + worker **en proceso** (diseñado) |
+| Metadata | **SQLite** (WAL + FKs; migraciones 0001/0002) |
+| Bytes | **Filesystem administrado** bajo `media_root` |
+| Jobs | Tabla `jobs` + generate stub **en proceso**; recovery de `running` al boot |
 | Package manager JS | **pnpm** 8 workspace |
 | Nube / Postgres / Supabase | **No** en el núcleo |
 
@@ -34,7 +34,7 @@ VisuaLibrary/
   docs/                      # producto + playbook + constituciones
 ```
 
-Estado de código: **scaffold** (health command, 6 rutas placeholder). Sin dominio de catálogo implementado.
+Estado de código: **F1–F6 MVP usable** — 6 estaciones con flujos reales (catálogo, generate stub, Review, Library, Factory manual/automatic, Plans, Coverage). Post-MVP: search/export, worker completo, providers IA.
 
 ---
 

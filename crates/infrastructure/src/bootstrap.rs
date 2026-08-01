@@ -22,8 +22,12 @@ pub fn bootstrap(app_data_root: PathBuf) -> Result<Platform, AppError> {
     let conn = open_database(&layout.db_path).map_err(AppError::from)?;
     migrate(&conn).map_err(AppError::from)?;
 
+    let settings = Arc::new(SqliteSettingsStore::new(conn));
+    // Durable jobs: recover work left in `running` after crash/kill.
+    let _recovered = settings.recover_running_jobs()?;
+
     Ok(Platform {
         layout,
-        settings: Arc::new(SqliteSettingsStore::new(conn)),
+        settings,
     })
 }

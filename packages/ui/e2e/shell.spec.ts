@@ -1,8 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Smoke E2E for the six workstations (scaffold only).
- * No business flows yet — product implementation paused.
+ * Smoke E2E for the six MVP workstations (UI shell via Vite; no Tauri IPC).
  */
 test.describe("Visual Library shell", () => {
   test("loads Library and exposes six primary stations", async ({ page }) => {

@@ -2,6 +2,7 @@ use visual_library_domain::{approve, mark_duplicate, reject, supersede, AssetSta
 
 use crate::assets::AssetDto;
 use crate::error::AppError;
+use crate::integrations::IntegrationConfig;
 use crate::jobs::{generate_stub_asset, GenerateStubInput, GenerateStubResult, MediaWriter};
 use crate::ports::assets::AssetStore;
 use crate::ports::catalog::CatalogStore;
@@ -115,7 +116,8 @@ pub fn mark_asset_duplicate(
         .ok_or_else(|| AppError::Internal("asset missing after mark duplicate".into()))
 }
 
-/// Supersede current waiting asset and generate a new stub into waiting_review.
+/// Supersede current **waiting_review** asset and generate a new stub into waiting_review.
+/// Approved Library assets cannot be regenerated via this path (protect Library gate).
 pub fn regenerate_asset(
     catalog: &impl CatalogStore,
     assets: &impl AssetStore,
@@ -126,12 +128,19 @@ pub fn regenerate_asset(
     let asset = assets
         .get(asset_id)?
         .ok_or_else(|| AppError::NotFound(format!("asset {asset_id}")))?;
+    if asset.status != AssetStatus::WaitingReview.as_str() {
+        return Err(AppError::Validation(
+            "regenerate solo aplica a assets en waiting_review".into(),
+        ));
+    }
     let from = AssetStatus::parse(&asset.status).ok_or_else(|| {
         AppError::Validation(format!("status de asset desconocido: {}", asset.status))
     })?;
     let to = supersede(from).map_err(|e| AppError::Validation(e.to_string()))?;
     assets.update_status(asset_id, to.as_str(), None, None, Some("regenerated"))?;
 
+    // Keep all need metadata (prompt, provider, …); only the image/bytes change.
+    let mut cfg = IntegrationConfig::default();
     generate_stub_asset(
         catalog,
         assets,
@@ -141,8 +150,10 @@ pub fn regenerate_asset(
             concept_id: asset.concept_id,
             representation_id: asset.representation_id,
             prompt: asset.prompt,
+            provider: asset.provider,
             idempotency_key: Some(format!("regen:{asset_id}:{}", now())),
         },
+        &mut cfg,
     )
 }
 
@@ -326,5 +337,93 @@ mod tests {
         let d = mark_asset_duplicate(&store, "a1", "a2").unwrap();
         assert_eq!(d.status, "duplicate");
         assert_eq!(d.duplicate_of_asset_id.as_deref(), Some("a2"));
+    }
+
+    #[test]
+    fn regenerate_rejects_approved_library_assets() {
+        let store = MemAssets::default();
+        let mut a = sample_waiting();
+        a.status = "approved".into();
+        store.insert(&a).unwrap();
+        // Catalog/jobs unused when gate fails early — dummy stores not needed if we only call with store.
+        // regenerate_asset needs catalog/jobs/media; use empty mem via early return before generate.
+        struct EmptyCat;
+        impl CatalogStore for EmptyCat {
+            fn list_themes(&self) -> Result<Vec<crate::catalog::ThemeDto>, AppError> {
+                Ok(vec![])
+            }
+            fn ensure_theme(
+                &self,
+                _: &str,
+                _: Option<&str>,
+            ) -> Result<crate::catalog::ThemeDto, AppError> {
+                unimplemented!()
+            }
+            fn list_concepts(&self) -> Result<Vec<crate::catalog::ConceptDto>, AppError> {
+                Ok(vec![])
+            }
+            fn ensure_concept(
+                &self,
+                _: &str,
+                _: &str,
+                _: Option<&str>,
+            ) -> Result<crate::catalog::ConceptDto, AppError> {
+                unimplemented!()
+            }
+            fn list_representations(
+                &self,
+                _: &str,
+            ) -> Result<Vec<crate::catalog::RepresentationDto>, AppError> {
+                Ok(vec![])
+            }
+            fn ensure_representation(
+                &self,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &str,
+            ) -> Result<crate::catalog::RepresentationDto, AppError> {
+                unimplemented!()
+            }
+        }
+        struct EmptyJobs;
+        impl JobStore for EmptyJobs {
+            fn insert(&self, _: &crate::jobs::JobDto) -> Result<(), AppError> {
+                Ok(())
+            }
+            fn get(&self, _: &str) -> Result<Option<crate::jobs::JobDto>, AppError> {
+                Ok(None)
+            }
+            fn get_by_idempotency_key(
+                &self,
+                _: &str,
+            ) -> Result<Option<crate::jobs::JobDto>, AppError> {
+                Ok(None)
+            }
+            fn update(
+                &self,
+                _: &str,
+                _: &str,
+                _: i64,
+                _: Option<&str>,
+                _: Option<&str>,
+                _: Option<&str>,
+                _: Option<&str>,
+            ) -> Result<(), AppError> {
+                Ok(())
+            }
+        }
+        struct NoMedia;
+        impl MediaWriter for NoMedia {
+            fn write_asset_file(
+                &self,
+                _: &str,
+                _: &[u8],
+            ) -> Result<std::path::PathBuf, AppError> {
+                unreachable!()
+            }
+        }
+        let err = regenerate_asset(&EmptyCat, &store, &EmptyJobs, &NoMedia, "a1").unwrap_err();
+        assert!(err.to_string().contains("waiting_review"));
     }
 }

@@ -36,8 +36,8 @@ Mapa histórico: [FOUNDATION_REVIEW.md](./FOUNDATION_REVIEW.md).
 | **Foundation 4** | **Hecha** — Manual Factory preview FOUND/GENERATE + submit faltantes |
 | **Foundation 5** | **Hecha** — Plans draft/approve + Automatic Factory |
 | **Foundation 6** | **Hecha** — Coverage issues + Review 5 acciones |
-| Scaffold Tauri + 6 rutas | Sí |
-| Negocio (Factory/Review/…) | **Pausa** (sin catálogo) |
+| Scaffold Tauri + 6 rutas | Sí (estaciones con UI real F1–F6) |
+| Negocio (Factory/Review/…) | **MVP local usable** (stub de generación; sin providers IA) |
 | Tests | Vitest, Playwright (Vite), cargo test/fmt/check |
 
 ---

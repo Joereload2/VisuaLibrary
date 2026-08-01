@@ -4,6 +4,7 @@ type Props = {
   notes?: string[];
 };
 
+/** Lightweight station shell for empty / offline views (not primary F1–F6 pages). */
 export function StationPlaceholder({ title, purpose, notes = [] }: Props) {
   return (
     <section className="station">
@@ -12,11 +13,8 @@ export function StationPlaceholder({ title, purpose, notes = [] }: Props) {
         <p>{purpose}</p>
       </header>
       <div className="placeholder-card">
-        <h3>Placeholder de estación</h3>
-        <p>
-          Sin lógica de catálogo en Fase 1. Esta vista solo fija la navegación
-          por flujos.
-        </p>
+        <h3>Vista auxiliar</h3>
+        <p>Las estaciones MVP viven en sus páginas de flujo (Factory, Review, Library, …).</p>
         {notes.length > 0 ? (
           <ul>
             {notes.map((note) => (

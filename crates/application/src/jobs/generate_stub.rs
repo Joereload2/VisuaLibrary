@@ -5,12 +5,15 @@ use visual_library_domain::AssetStatus;
 
 use crate::assets::AssetDto;
 use crate::error::AppError;
+use crate::integrations::{
+    generate_image_bytes, select_image_provider_with_config, IntegrationConfig,
+};
 use crate::jobs::JobDto;
 use crate::ports::assets::AssetStore;
 use crate::ports::catalog::CatalogStore;
 use crate::ports::jobs::JobStore;
 
-/// Minimal 1x1 PNG (transparent).
+/// Legacy 1x1 transparent PNG (kept for hash tests / fallback).
 pub const STUB_PNG: &[u8] = &[
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
     0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
@@ -19,11 +22,69 @@ pub const STUB_PNG: &[u8] = &[
     0x42, 0x60, 0x82,
 ];
 
+const STUB_SIZE: u32 = 128;
+
+/// Solid-color BMP unique per seed so regenerate is visibly different in Review.
+pub fn colored_stub_bmp(seed: &str) -> Vec<u8> {
+    let (r, g, b) = color_from_seed(seed);
+    let w = STUB_SIZE;
+    let h = STUB_SIZE;
+    let row_stride = ((w * 3 + 3) / 4) * 4;
+    let pixel_bytes = row_stride * h;
+    let file_size = 14 + 40 + pixel_bytes;
+    let mut out = Vec::with_capacity(file_size as usize);
+    out.extend_from_slice(b"BM");
+    out.extend_from_slice(&file_size.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes());
+    out.extend_from_slice(&54u32.to_le_bytes()); // pixel offset
+    // BITMAPINFOHEADER
+    out.extend_from_slice(&40u32.to_le_bytes());
+    out.extend_from_slice(&(w as i32).to_le_bytes());
+    out.extend_from_slice(&(h as i32).to_le_bytes()); // bottom-up
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&24u16.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&pixel_bytes.to_le_bytes());
+    out.extend_from_slice(&2835u32.to_le_bytes());
+    out.extend_from_slice(&2835u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    let pad = vec![0u8; (row_stride - w * 3) as usize];
+    for y in 0..h {
+        // Subtle gradient so it looks like a real preview tile.
+        let fy = (y as f32) / (h as f32);
+        let rr = (r as f32 * (0.55 + 0.45 * fy)) as u8;
+        let gg = (g as f32 * (0.55 + 0.45 * (1.0 - fy))) as u8;
+        let bb = b;
+        for _x in 0..w {
+            out.push(bb);
+            out.push(gg);
+            out.push(rr);
+        }
+        out.extend_from_slice(&pad);
+    }
+    out
+}
+
+fn color_from_seed(seed: &str) -> (u8, u8, u8) {
+    use sha2::{Digest, Sha256};
+    let dig = Sha256::digest(seed.as_bytes());
+    // Keep mid-high channel so the tile is visible on dark UI.
+    (
+        80 + (dig[0] % 160),
+        80 + (dig[1] % 160),
+        80 + (dig[2] % 160),
+    )
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateStubInput {
     pub concept_id: String,
     pub representation_id: String,
     pub prompt: Option<String>,
+    /// Selected image provider id (multi-provider; one per generate).
+    pub provider: Option<String>,
     pub idempotency_key: Option<String>,
 }
 
@@ -57,22 +118,43 @@ fn new_id(prefix: &str) -> String {
     format!("{prefix}_{}_{}", d.as_secs(), d.subsec_nanos())
 }
 
-/// Enqueue + run generate_asset stub: job ends in `waiting_review` (D-019), never approved.
+/// Enqueue + run generate_asset: job ends in `waiting_review` (D-019), never approved.
+/// Image bytes come from the selected provider adapter (stub today; remote when connected).
 pub fn generate_stub_asset(
     catalog: &impl CatalogStore,
     assets: &impl AssetStore,
     jobs: &impl JobStore,
     media: &impl MediaWriter,
     input: GenerateStubInput,
+    cfg: &mut IntegrationConfig,
 ) -> Result<GenerateStubResult, AppError> {
+    // Idempotent short-circuit only while the produced asset is still usable
+    // (waiting_review). Rejected / superseded / duplicate must allow a new generate.
+    // If the prior key is still stored but unusable, mint a retry key (UNIQUE on jobs).
+    let mut idempotency_key = input.idempotency_key.clone();
     if let Some(key) = input.idempotency_key.as_deref() {
         if let Some(existing) = jobs.get_by_idempotency_key(key)? {
             if existing.status == "waiting_review" {
                 if let Some(out) = existing.outputs_json.as_deref() {
                     if let Ok(parsed) = serde_json::from_str::<GenerateStubResult>(out) {
-                        return Ok(parsed);
+                        let asset_ok = assets
+                            .get(&parsed.asset_id)?
+                            .map(|a| a.status == AssetStatus::WaitingReview.as_str())
+                            .unwrap_or(false);
+                        if asset_ok {
+                            return Ok(parsed);
+                        }
+                        idempotency_key = Some(format!("{key}:retry:{}", now()));
                     }
                 }
+            } else if existing.status == "queued" || existing.status == "running" {
+                // In-flight: do not enqueue a twin under the same key.
+                return Err(AppError::Validation(format!(
+                    "job en curso para clave de idempotencia {key}"
+                )));
+            } else {
+                // Terminal non-waiting job still holds the unique key — retry suffix.
+                idempotency_key = Some(format!("{key}:retry:{}", now()));
             }
         }
     }
@@ -94,7 +176,27 @@ pub fn generate_stub_asset(
     let asset_id = new_id("asset");
     let req_id = new_id("greq");
     let ts = now();
-    let rel_path = format!("assets/stub/{asset_id}.png");
+
+    let selected = select_image_provider_with_config(input.provider.as_deref(), cfg)?;
+    let provider_id = selected.id.clone();
+    let prompt_text = input.prompt.clone().unwrap_or_else(|| "visual lesson asset".into());
+    // Adapter: stub works; remote APIs when keys + HTTP connected.
+    let (generated, bill_provider) =
+        match generate_image_bytes(&provider_id, &prompt_text, &asset_id, cfg) {
+            Ok(g) => (g, provider_id.clone()),
+            Err(e) if provider_id != "stub" => {
+                // Graceful fallback so Manual still works while APIs are being wired.
+                let mut g = generate_image_bytes("stub", &prompt_text, &asset_id, cfg)?;
+                g.provider_id = format!("stub_fallback_from_{provider_id}");
+                let _ = e;
+                (g, "stub".into())
+            }
+            Err(e) => return Err(e),
+        };
+    // Track spend / free quota even when free (unit cost 0).
+    let _usage = crate::integrations::record_usage(cfg, &bill_provider, 1)?;
+    let ext = generated.format.as_str();
+    let rel_path = format!("assets/{provider_id}/{asset_id}.{ext}");
 
     let payload = serde_json::json!({
         "concept_id": input.concept_id,
@@ -102,6 +204,7 @@ pub fn generate_stub_asset(
         "asset_id": asset_id,
         "generation_request_id": req_id,
         "relative_path": rel_path,
+        "provider": generated.provider_id,
     });
 
     let job = JobDto {
@@ -115,7 +218,7 @@ pub fn generate_stub_asset(
         last_error: None,
         related_entity_type: Some("asset".into()),
         related_entity_id: Some(asset_id.clone()),
-        idempotency_key: input.idempotency_key.clone(),
+        idempotency_key,
         outputs_json: None,
         created_at: ts.clone(),
         updated_at: ts.clone(),
@@ -127,8 +230,8 @@ pub fn generate_stub_asset(
     // Run immediately (in-process worker foundation).
     jobs.update(&job_id, "running", 1, None, None, Some(&ts), None)?;
 
-    media.write_asset_file(&rel_path, STUB_PNG)?;
-    let hash = sha256_hex(STUB_PNG);
+    media.write_asset_file(&rel_path, &generated.bytes)?;
+    let hash = sha256_hex(&generated.bytes);
 
     let asset = AssetDto {
         id: asset_id.clone(),
@@ -137,13 +240,13 @@ pub fn generate_stub_asset(
         status: AssetStatus::WaitingReview.as_str().into(),
         storage_path: rel_path.clone(),
         content_hash: Some(hash),
-        width: Some(1),
-        height: Some(1),
-        mime: Some("image/png".into()),
-        format: Some("png".into()),
+        width: Some(generated.width),
+        height: Some(generated.height),
+        mime: Some(generated.mime.clone()),
+        format: Some(generated.format.clone()),
         orientation: Some("any".into()),
         style: None,
-        provider: Some("stub".into()),
+        provider: Some(generated.provider_id.clone()),
         prompt: input.prompt,
         generation_request_id: Some(req_id),
         review_notes: None,
@@ -195,18 +298,49 @@ pub struct FsMediaWriter {
 
 impl MediaWriter for FsMediaWriter {
     fn write_asset_file(&self, relative_path: &str, bytes: &[u8]) -> Result<PathBuf, AppError> {
-        if relative_path.contains("..") {
-            return Err(AppError::Validation(
-                "storage_path no puede contener '..'".into(),
-            ));
-        }
-        let full = self.media_root.join(relative_path);
+        let full = resolve_under_media_root(&self.media_root, relative_path)?;
         if let Some(parent) = full.parent() {
             std::fs::create_dir_all(parent).map_err(|e| AppError::Storage(e.to_string()))?;
         }
         std::fs::write(&full, bytes).map_err(|e| AppError::Storage(e.to_string()))?;
         Ok(full)
     }
+}
+
+/// Reject absolute paths and `..` components; keep writes under media_root.
+pub fn resolve_under_media_root(media_root: &Path, relative_path: &str) -> Result<PathBuf, AppError> {
+    let rel = Path::new(relative_path);
+    if rel.is_absolute() {
+        return Err(AppError::Validation(
+            "storage_path debe ser relativo al media_root".into(),
+        ));
+    }
+    for component in rel.components() {
+        use std::path::Component;
+        match component {
+            Component::Normal(_) => {}
+            Component::CurDir => {}
+            _ => {
+                return Err(AppError::Validation(
+                    "storage_path no puede contener '..' ni prefijos especiales".into(),
+                ));
+            }
+        }
+    }
+    let full = media_root.join(rel);
+    // Soft check without requiring root to exist yet: prefix via components.
+    let root_canon = media_root
+        .canonicalize()
+        .unwrap_or_else(|_| media_root.to_path_buf());
+    // If parent of full exists, verify; otherwise join is enough after component filter.
+    if let Ok(parent) = full.parent().unwrap_or(media_root).canonicalize() {
+        if !parent.starts_with(&root_canon) && parent != root_canon {
+            return Err(AppError::Validation(
+                "storage_path escapa del media_root".into(),
+            ));
+        }
+    }
+    Ok(full)
 }
 
 pub fn media_writer_for(media_root: &Path) -> FsMediaWriter {
@@ -437,6 +571,74 @@ mod tests {
     }
 
     #[test]
+    fn path_safety_rejects_escape() {
+        let root = PathBuf::from("/tmp/media-root-test");
+        assert!(resolve_under_media_root(&root, "../etc/passwd").is_err());
+        assert!(resolve_under_media_root(&root, "/abs/path.png").is_err());
+        assert!(resolve_under_media_root(&root, "assets/stub/a.png").is_ok());
+    }
+
+    #[test]
+    fn idempotency_skips_when_asset_no_longer_waiting() {
+        let mem = MemAll::default();
+        mem.concepts.lock().unwrap().push(ConceptDto {
+            id: "c1".into(),
+            key: "k".into(),
+            name: "K".into(),
+            description: None,
+            status: "active".into(),
+        });
+        mem.reps.lock().unwrap().push(RepresentationDto {
+            id: "r1".into(),
+            concept_id: "c1".into(),
+            key: "hero".into(),
+            name: "Hero".into(),
+            orientation_default: "any".into(),
+            status: "active".into(),
+        });
+        // First generate
+        let mut cfg = crate::integrations::IntegrationConfig::default();
+        let first = generate_stub_asset(
+            &mem,
+            &mem,
+            &mem,
+            &mem,
+            GenerateStubInput {
+                concept_id: "c1".into(),
+                representation_id: "r1".into(),
+                prompt: None,
+                provider: Some("stub".into()),
+                idempotency_key: Some("idem-1".into()),
+            },
+            &mut cfg,
+        )
+        .unwrap();
+        // Reject asset (leave job outputs pointing at it)
+        {
+            let mut g = mem.assets.lock().unwrap();
+            let a = g.get_mut(&first.asset_id).unwrap();
+            a.status = "rejected".into();
+        }
+        let second = generate_stub_asset(
+            &mem,
+            &mem,
+            &mem,
+            &mem,
+            GenerateStubInput {
+                concept_id: "c1".into(),
+                representation_id: "r1".into(),
+                prompt: None,
+                provider: Some("stub".into()),
+                idempotency_key: Some("idem-1".into()),
+            },
+            &mut cfg,
+        )
+        .unwrap();
+        assert_ne!(first.asset_id, second.asset_id);
+        assert_eq!(second.asset_status, "waiting_review");
+    }
+
+    #[test]
     fn generate_ends_waiting_review_not_approved() {
         let store = MemAll::default();
         store.concepts.lock().unwrap().push(ConceptDto {
@@ -455,6 +657,7 @@ mod tests {
             status: "active".into(),
         });
 
+        let mut cfg = crate::integrations::IntegrationConfig::default();
         let res = generate_stub_asset(
             &store,
             &store,
@@ -464,8 +667,10 @@ mod tests {
                 concept_id: "c1".into(),
                 representation_id: "r1".into(),
                 prompt: Some("test".into()),
+                provider: Some("stub".into()),
                 idempotency_key: Some("idem-1".into()),
             },
+            &mut cfg,
         )
         .unwrap();
 
@@ -484,8 +689,10 @@ mod tests {
                 concept_id: "c1".into(),
                 representation_id: "r1".into(),
                 prompt: None,
+                provider: Some("stub".into()),
                 idempotency_key: Some("idem-1".into()),
             },
+            &mut cfg,
         )
         .unwrap();
         assert_eq!(res.asset_id, res2.asset_id);

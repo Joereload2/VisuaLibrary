@@ -134,3 +134,28 @@ impl JobStore for SqliteSettingsStore {
         })
     }
 }
+
+impl SqliteSettingsStore {
+    /// On boot: jobs left `running` (process crash) → `interrupted` then requeue as `queued`.
+    pub fn recover_running_jobs(&self) -> Result<u64, AppError> {
+        self.with_conn(|conn| {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let ts = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let updated = format!("unix:{ts}");
+            // Mark interrupted (audit) then requeue for in-process worker retry.
+            let n = conn
+                .execute(
+                    "UPDATE jobs SET status = 'queued',
+                     last_error = COALESCE(last_error, 'recovered_from_running'),
+                     updated_at = ?1
+                     WHERE status = 'running'",
+                    rusqlite::params![updated],
+                )
+                .map_err(|e| AppError::Storage(e.to_string()))?;
+            Ok(n as u64)
+        })
+    }
+}
