@@ -1,6 +1,7 @@
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import {
   invokeApproveAsset,
+  invokeAssetPreview,
   invokeEditMetadata,
   invokeListLibraryAssets,
   invokeListWaitingReview,
@@ -23,8 +24,10 @@ export function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (preferId?: string | null) => {
     setError(null);
     try {
       const [list, lib] = await Promise.all([
@@ -33,9 +36,11 @@ export function ReviewPage() {
       ]);
       setItems(list);
       setLibrary(lib);
-      setSelectedId((prev) =>
-        prev && list.some((a) => a.id === prev) ? prev : list[0]?.id ?? null,
-      );
+      setSelectedId((prev) => {
+        if (preferId && list.some((a) => a.id === preferId)) return preferId;
+        if (prev && list.some((a) => a.id === prev)) return prev;
+        return list[0]?.id ?? null;
+      });
       setLoad("ready");
     } catch {
       setLoad("unavailable");
@@ -56,15 +61,41 @@ export function ReviewPage() {
     }
   }, [selected, library]);
 
-  async function run(action: () => Promise<void>, okMsg: string) {
+  useEffect(() => {
+    if (!selected) {
+      setPreviewUrl(null);
+      setPreviewError(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewUrl(null);
+    setPreviewError(null);
+    void invokeAssetPreview(selected.id)
+      .then((p) => {
+        if (!cancelled) setPreviewUrl(p.data_url);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPreviewError(String((err as { message?: string })?.message ?? err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id, selected?.storage_path, selected?.content_hash]);
+
+  async function run(
+    action: () => Promise<string | void>,
+    okMsg: string,
+  ) {
     if (busy) return;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      await action();
+      const prefer = await action();
       setMessage(okMsg);
-      await refresh();
+      await refresh(typeof prefer === "string" ? prefer : null);
     } catch (err) {
       setError(String((err as { message?: string })?.message ?? err));
     } finally {
@@ -146,6 +177,22 @@ export function ReviewPage() {
               <p>Selecciona un asset de la cola.</p>
             ) : (
               <>
+                <div style={previewBoxStyle}>
+                  {previewUrl ? (
+                    <img
+                      key={selected.id}
+                      src={previewUrl}
+                      alt={`Preview ${selected.id}`}
+                      style={previewImgStyle}
+                    />
+                  ) : previewError ? (
+                    <p style={{ color: "#f87171", fontSize: "0.85rem" }}>
+                      Sin preview: {previewError}
+                    </p>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)" }}>Cargando imagen…</p>
+                  )}
+                </div>
                 <p>
                   <strong>status:</strong> {selected.status}
                 </p>
@@ -155,6 +202,11 @@ export function ReviewPage() {
                 <p>
                   <strong>provider:</strong> {selected.provider ?? "—"}
                 </p>
+                {selected.width && selected.height ? (
+                  <p>
+                    <strong>size:</strong> {selected.width}×{selected.height}
+                  </p>
+                ) : null}
 
                 <label style={labelStyle}>review notes</label>
                 <input
@@ -224,8 +276,8 @@ export function ReviewPage() {
                     onClick={() =>
                       void run(
                         () =>
-                          invokeRegenerateAsset(selected.id).then(() => undefined),
-                        "Regenerado: actual superseded, nuevo en cola.",
+                          invokeRegenerateAsset(selected.id).then((r) => r.asset_id),
+                        "Regenerado: se muestra el nuevo asset (color distinto).",
                       )
                     }
                     style={secondaryBtn}
@@ -325,4 +377,26 @@ const labelStyle: CSSProperties = {
   marginBottom: 4,
   fontSize: "0.85rem",
   color: "var(--text-muted)",
+};
+
+const previewBoxStyle: CSSProperties = {
+  marginBottom: "1rem",
+  padding: "0.75rem",
+  borderRadius: 10,
+  border: "1px solid var(--border)",
+  background: "rgba(0,0,0,0.25)",
+  minHeight: 160,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const previewImgStyle: CSSProperties = {
+  maxWidth: "100%",
+  maxHeight: 240,
+  width: "auto",
+  height: "auto",
+  imageRendering: "pixelated",
+  borderRadius: 6,
+  border: "1px solid var(--border)",
 };
