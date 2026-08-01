@@ -373,6 +373,61 @@ Estado: `Accepted` | `Proposed` | `Superseded`.
 
 ---
 
+### D-034 — Manual Factory v1 (guion → needs → provider → Review)
+
+| | |
+|--|--|
+| **Estado** | Accepted |
+| **Contexto** | Productor YouTube/lecciones; guion como base del modo manual. |
+| **Decisión** | Entrada = **texto de guion**. IA/heurística **propone** needs; humano edita/aprueba. Need = **una imagen conceptual** con metadata rica. FOUND solo **Library approved**. Multi-provider en catálogo; **un** provider por generate; si preferred no disponible → re-elegir en el intento. Prompt = plantilla + BD + **edición humana**. GENERATE → Waiting Review. Regenerar: **mismos datos, nueva imagen**. Propuesta v1 = heurística local (LLM SpaceXAI posterior). |
+| **Consecuencias** | UI wizard Manual; commands `propose_needs_from_script`, `list_image_providers`. Audio-driven breakdown y providers remotos reales = post-v1. |
+
+---
+
+### D-035 — Manual Factory v1.1 (instrucciones guion + needs BD + variantes)
+
+| | |
+|--|--|
+| **Estado** | Accepted |
+| **Contexto** | Needs deben ser requerimientos de BD; variedad desde datos; mismo prompt → varias imágenes. |
+| **Decisión** | (1) Bloque **script_instructions** (IA, editable) separado de needs. (2) Need = fila de **requerimiento BD** (+ `ai_instructions` de tramo). (3) `variant_count` **1–3** (default **3**); matices mezcla **literal/metafórico + estilo visual**. (4) Review puede aprobar **1–3** variantes. (5) Si FOUND: **preguntar en el momento** (`also_generate_if_found`) si enriquecer con variantes. |
+| **Consecuencias** | Submit crea N stubs por need; decisión `found_enrich`; UI con checkbox al FOUND. |
+
+---
+
+### D-036 — Integrations ready: connect APIs later, choose in Settings
+
+| | |
+|--|--|
+| **Estado** | Accepted |
+| **Contexto** | Usuario quiere dejar listo el producto y solo conectar APIs + elegir. |
+| **Decisión** | Capa `integrations/`: config local (keys en settings SQLite), catálogo **script AI** (`heuristic` \| `spacexai`) y **image providers** (`stub`, `spacexai-image`, `openai-image`, `stability`). Flujo siempre usa adapters. Remotos sin HTTP: status `not_connected` / fallback stub. Conectar API = implementar el cuerpo HTTP marcado en `script_ai.rs` / `image_gen.rs` + key en Settings. |
+| **Consecuencias** | Settings UI para keys + selección; Manual ya enruta por config. |
+
+---
+
+### D-037 — Presupuesto y gasto por conector (incl. free)
+
+| | |
+|--|--|
+| **Estado** | Accepted |
+| **Contexto** | Control de costes y cuotas por provider, también cuando es gratis. |
+| **Decisión** | Ledger por conector: `unit_cost_cents`, `budget_limit_cents` (0=∞), `spent_cents`, `free_quota` / `free_used`. Free ilimitado (stub): unit 0 + free_quota 0. Selección de provider respeta `can_afford`. Cada generate registra uso (aunque 0¢). UI Settings edita límites y resetea uso. |
+| **Consecuencias** | Status `budget_exhausted`; gasto persiste en settings.integrations. |
+
+---
+
+### D-038 — OmniRoute as image + script gateway (Manual + Automatic)
+
+| | |
+|--|--|
+| **Estado** | Accepted |
+| **Contexto** | Free image/chat stack vía gateway local; Automatic debe ir gastando free options. |
+| **Decisión** | Provider `omniroute`: base_url (default `http://127.0.0.1:20128/v1`), image/chat model `auto`, prefer_free. HTTP OpenAI-compatible `images/generations` + `chat/completions`. Status `ready` con URL; conectar = arrancar OmniRoute + modelos free. Manual y Automatic comparten adapter. Si falla → stub/heurística. Ledger free con free_quota por defecto. |
+| **Consecuencias** | Settings OmniRoute; selección prioriza free cuando `omniroute_prefer_free`. |
+
+---
+
 ## 3. Decisiones propuestas (abiertas)
 
 ### P-001 — Auto-ensure de Concept/Representation en Manual Factory

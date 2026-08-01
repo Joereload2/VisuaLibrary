@@ -7,14 +7,18 @@ use serde::Deserialize;
 use tauri::{Manager, State};
 use visual_library_application::{
     add_plan_item, approve_asset, approve_coverage_plan, create_plan, edit_asset_metadata,
-    ensure_concept, ensure_representation, ensure_theme, generate_stub_asset, get_coverage_report,
-    get_plan_with_items, get_settings as load_settings, list_concepts, list_library_assets,
-    list_plans, list_representations, list_themes, list_waiting_review, mark_asset_duplicate,
-    media_writer_for, preview_manual_batch, regenerate_asset, reject_asset,
-    run_automatic_from_plan, submit_manual_batch, update_media_root, validate_media_root,
-    AppPathsDto, AssetDto, AutomaticRunResult, ConceptDto, CoverageReport, GenerateStubInput,
-    GenerateStubResult, ManualBatchPreview, ManualNeed, PlanDto, PlanItemDto, PlanWithItemsDto,
-    RepresentationDto, SettingsDto, ThemeDto, PRODUCT_NAME,
+    ensure_concept, ensure_representation, ensure_theme, generate_stub_asset, get_asset_preview,
+    get_coverage_report, get_integration_config_dto, get_plan_with_items,
+    get_settings as load_settings, list_concepts, list_image_providers_with_config,
+    list_library_assets, list_plans, list_representations, list_script_ai_providers, list_themes,
+    list_waiting_review, load_integration_config, mark_asset_duplicate, media_writer_for,
+    preview_manual_batch, propose_needs_with_config, regenerate_asset, reject_asset,
+    run_automatic_from_plan, save_integration_config, submit_manual_batch,
+    update_integration_config, update_media_root, validate_media_root, AppPathsDto, AssetDto,
+    AssetPreviewDto, AutomaticRunResult, ConceptDto, CoverageReport, GenerateStubInput,
+    GenerateStubResult, ImageProviderInfo, IntegrationConfigDto, IntegrationConfigUpdate,
+    ManualBatchPreview, ManualNeed, PlanDto, PlanItemDto, PlanWithItemsDto, ProposeNeedsResult,
+    RepresentationDto, ScriptAiProviderInfo, SettingsDto, ThemeDto, PRODUCT_NAME,
 };
 use visual_library_infrastructure::{bootstrap, infrastructure_health, Platform};
 
@@ -32,6 +36,10 @@ fn media_root(state: &AppState) -> Result<PathBuf, CommandError> {
     let s = load_settings(store(state), &state.platform.layout.media_root)
         .map_err(CommandError::from)?;
     Ok(PathBuf::from(s.media_root))
+}
+
+fn integrations(state: &AppState) -> Result<visual_library_application::IntegrationConfig, CommandError> {
+    load_integration_config(store(state)).map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -181,7 +189,8 @@ fn generate_stub_asset_cmd(
 ) -> Result<GenerateStubResult, CommandError> {
     let root = media_root(&state)?;
     let writer = media_writer_for(&root);
-    generate_stub_asset(
+    let mut cfg = integrations(&state)?;
+    let res = generate_stub_asset(
         store(&state),
         store(&state),
         store(&state),
@@ -190,10 +199,14 @@ fn generate_stub_asset_cmd(
             concept_id: args.concept_id,
             representation_id: args.representation_id,
             prompt: args.prompt,
+            provider: Some(cfg.default_image_provider.clone()),
             idempotency_key: args.idempotency_key,
         },
+        &mut cfg,
     )
-    .map_err(CommandError::from)
+    .map_err(CommandError::from)?;
+    let _ = save_integration_config(store(&state), &cfg);
+    Ok(res)
 }
 
 #[tauri::command]
@@ -291,6 +304,15 @@ fn regenerate_asset_cmd(
 }
 
 #[tauri::command]
+fn get_asset_preview_cmd(
+    state: State<'_, AppState>,
+    args: AssetIdArgs,
+) -> Result<AssetPreviewDto, CommandError> {
+    let root = media_root(&state)?;
+    get_asset_preview(store(&state), &root, &args.asset_id).map_err(CommandError::from)
+}
+
+#[tauri::command]
 fn get_coverage_report_cmd(state: State<'_, AppState>) -> Result<CoverageReport, CommandError> {
     get_coverage_report(store(&state), store(&state), store(&state)).map_err(CommandError::from)
 }
@@ -301,12 +323,60 @@ struct ManualBatchArgs {
     batch_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ProposeNeedsArgs {
+    script: String,
+    max_needs: Option<usize>,
+}
+
+#[tauri::command]
+fn propose_needs_from_script_cmd(
+    state: State<'_, AppState>,
+    args: ProposeNeedsArgs,
+) -> Result<ProposeNeedsResult, CommandError> {
+    let cfg = integrations(&state)?;
+    propose_needs_with_config(&args.script, args.max_needs, &cfg).map_err(CommandError::from)
+}
+
+#[tauri::command]
+fn list_image_providers_cmd(
+    state: State<'_, AppState>,
+) -> Result<Vec<ImageProviderInfo>, CommandError> {
+    let cfg = integrations(&state)?;
+    Ok(list_image_providers_with_config(&cfg))
+}
+
+#[tauri::command]
+fn list_script_ai_providers_cmd(
+    state: State<'_, AppState>,
+) -> Result<Vec<ScriptAiProviderInfo>, CommandError> {
+    let cfg = integrations(&state)?;
+    Ok(list_script_ai_providers(&cfg))
+}
+
+#[tauri::command]
+fn get_integration_config_cmd(
+    state: State<'_, AppState>,
+) -> Result<IntegrationConfigDto, CommandError> {
+    get_integration_config_dto(store(&state)).map_err(CommandError::from)
+}
+
+#[tauri::command]
+fn update_integration_config_cmd(
+    state: State<'_, AppState>,
+    args: IntegrationConfigUpdate,
+) -> Result<IntegrationConfigDto, CommandError> {
+    update_integration_config(store(&state), args).map_err(CommandError::from)
+}
+
 #[tauri::command]
 fn preview_manual_batch_cmd(
     state: State<'_, AppState>,
     args: ManualBatchArgs,
 ) -> Result<ManualBatchPreview, CommandError> {
-    preview_manual_batch(store(&state), store(&state), &args.needs).map_err(CommandError::from)
+    let cfg = integrations(&state)?;
+    preview_manual_batch(store(&state), store(&state), &args.needs, &cfg)
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -316,15 +386,19 @@ fn submit_manual_batch_cmd(
 ) -> Result<ManualBatchPreview, CommandError> {
     let root = media_root(&state)?;
     let writer = media_writer_for(&root);
-    submit_manual_batch(
+    let mut cfg = integrations(&state)?;
+    let res = submit_manual_batch(
         store(&state),
         store(&state),
         store(&state),
         &writer,
         &args.needs,
         args.batch_id.as_deref(),
+        &mut cfg,
     )
-    .map_err(CommandError::from)
+    .map_err(CommandError::from)?;
+    let _ = save_integration_config(store(&state), &cfg);
+    Ok(res)
 }
 
 #[derive(Debug, Deserialize)]
@@ -431,6 +505,9 @@ pub fn run() {
             get_settings,
             set_media_root,
             validate_media_root_cmd,
+            get_integration_config_cmd,
+            update_integration_config_cmd,
+            list_script_ai_providers_cmd,
             list_themes_cmd,
             ensure_theme_cmd,
             list_concepts_cmd,
@@ -445,7 +522,10 @@ pub fn run() {
             edit_asset_metadata_cmd,
             mark_duplicate_cmd,
             regenerate_asset_cmd,
+            get_asset_preview_cmd,
             get_coverage_report_cmd,
+            propose_needs_from_script_cmd,
+            list_image_providers_cmd,
             preview_manual_batch_cmd,
             submit_manual_batch_cmd,
             create_plan_cmd,

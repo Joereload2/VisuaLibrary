@@ -10,6 +10,16 @@ vi.mock("../../shared/ipc/client", () => ({
     throw new Error("no tauri");
   }),
   invokeSetMediaRoot: vi.fn(),
+  invokeGetIntegrationConfig: vi.fn(async () => {
+    throw new Error("no tauri");
+  }),
+  invokeListScriptAiProviders: vi.fn(async () => {
+    throw new Error("no tauri");
+  }),
+  invokeListImageProviders: vi.fn(async () => {
+    throw new Error("no tauri");
+  }),
+  invokeUpdateIntegrationConfig: vi.fn(),
 }));
 
 describe("SettingsPage", () => {

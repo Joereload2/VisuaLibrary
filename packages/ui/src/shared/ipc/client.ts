@@ -1,5 +1,5 @@
 /**
- * Thin IPC wrapper — Foundation 1–3 commands.
+ * Thin IPC wrapper — F1–F6 Tauri commands (catalog, factory, review, plans, coverage).
  */
 
 export type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
@@ -15,6 +15,73 @@ export type AppPathsDto = {
 
 export type SettingsDto = {
   media_root: string;
+};
+
+export type ConnectorBudgetDto = {
+  provider_id: string;
+  unit_cost_cents: number;
+  budget_limit_cents: number;
+  spent_cents: number;
+  available_budget_cents?: number | null;
+  free_quota: number;
+  free_used: number;
+  free_remaining?: number | null;
+  currency: string;
+  period: string;
+  is_free: boolean;
+  can_afford_one: boolean;
+};
+
+export type ConnectorBudgetUpdate = {
+  provider_id: string;
+  unit_cost_cents?: number | null;
+  budget_limit_cents?: number | null;
+  free_quota?: number | null;
+  period?: string | null;
+  is_free?: boolean | null;
+  reset_usage?: boolean | null;
+};
+
+export type IntegrationConfigDto = {
+  script_ai_provider: string;
+  default_image_provider: string;
+  enabled_image_providers: string[];
+  xai_api_key_set: boolean;
+  openai_api_key_set: boolean;
+  stability_api_key_set: boolean;
+  xai_api_key_hint: string;
+  openai_api_key_hint: string;
+  stability_api_key_hint: string;
+  omniroute_base_url: string;
+  omniroute_api_key_set: boolean;
+  omniroute_api_key_hint: string;
+  omniroute_image_model: string;
+  omniroute_chat_model: string;
+  omniroute_prefer_free: boolean;
+  connector_budgets: ConnectorBudgetDto[];
+};
+
+export type IntegrationConfigUpdate = {
+  script_ai_provider?: string | null;
+  default_image_provider?: string | null;
+  enabled_image_providers?: string[] | null;
+  xai_api_key?: string | null;
+  openai_api_key?: string | null;
+  stability_api_key?: string | null;
+  omniroute_base_url?: string | null;
+  omniroute_api_key?: string | null;
+  omniroute_image_model?: string | null;
+  omniroute_chat_model?: string | null;
+  omniroute_prefer_free?: boolean | null;
+  connector_budget_updates?: ConnectorBudgetUpdate[] | null;
+};
+
+export type ScriptAiProviderInfo = {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  status_detail: string;
 };
 
 export type ConceptDto = {
@@ -48,6 +115,10 @@ export type AssetDto = {
   status: string;
   storage_path: string;
   content_hash?: string | null;
+  width?: number | null;
+  height?: number | null;
+  mime?: string | null;
+  format?: string | null;
   orientation?: string | null;
   style?: string | null;
   provider?: string | null;
@@ -126,6 +197,22 @@ export async function invokeSetMediaRoot(mediaRoot: string): Promise<SettingsDto
   return invokeRequired<SettingsDto>("set_media_root", {
     args: { media_root: mediaRoot },
   });
+}
+
+export async function invokeGetIntegrationConfig(): Promise<IntegrationConfigDto> {
+  return invokeRequired<IntegrationConfigDto>("get_integration_config_cmd");
+}
+
+export async function invokeUpdateIntegrationConfig(
+  update: IntegrationConfigUpdate,
+): Promise<IntegrationConfigDto> {
+  return invokeRequired<IntegrationConfigDto>("update_integration_config_cmd", {
+    args: update,
+  });
+}
+
+export async function invokeListScriptAiProviders(): Promise<ScriptAiProviderInfo[]> {
+  return invokeRequired<ScriptAiProviderInfo[]>("list_script_ai_providers_cmd");
 }
 
 export async function invokeListConcepts(): Promise<ConceptDto[]> {
@@ -218,6 +305,14 @@ export type ManualNeed = {
   orientation?: string | null;
   style?: string | null;
   provider?: string | null;
+  script_excerpt?: string | null;
+  ai_instructions?: string | null;
+  pedagogical_intent?: string | null;
+  included?: boolean | null;
+  /** 1–3 variants from same base prompt (default 3). */
+  variant_count?: number | null;
+  /** If FOUND in Library, still generate variants (asked at that moment). */
+  also_generate_if_found?: boolean | null;
 };
 
 export type ManualNeedResult = {
@@ -229,7 +324,11 @@ export type ManualNeedResult = {
   representation_key: string;
   found_asset_id?: string | null;
   generate?: GenerateStubResult | null;
+  generates?: GenerateStubResult[];
+  variants_planned?: number;
+  matiz_labels?: string[];
   message: string;
+  selected_provider?: string | null;
 };
 
 export type ManualBatchPreview = {
@@ -237,7 +336,43 @@ export type ManualBatchPreview = {
   found_count: number;
   generate_count: number;
   skipped_count: number;
+  variant_images?: number;
 };
+
+export type ImageProvider = {
+  id: string;
+  name: string;
+  description?: string;
+  available?: boolean;
+  enabled?: boolean;
+  status?: string;
+  status_detail?: string;
+  cost_score: number;
+  quality_score: number;
+  availability_score: number;
+  kind: string;
+  notes?: string;
+};
+
+export type ProposeNeedsResult = {
+  needs: ManualNeed[];
+  script_instructions: string;
+  method: string;
+  notes: string;
+};
+
+export async function invokeProposeNeedsFromScript(
+  script: string,
+  maxNeeds?: number,
+): Promise<ProposeNeedsResult> {
+  return invokeRequired<ProposeNeedsResult>("propose_needs_from_script_cmd", {
+    args: { script, max_needs: maxNeeds ?? null },
+  });
+}
+
+export async function invokeListImageProviders(): Promise<ImageProvider[]> {
+  return invokeRequired<ImageProvider[]>("list_image_providers_cmd");
+}
 
 export async function invokePreviewManualBatch(
   needs: ManualNeed[],
@@ -368,6 +503,21 @@ export async function invokeRegenerateAsset(
   assetId: string,
 ): Promise<GenerateStubResult> {
   return invokeRequired<GenerateStubResult>("regenerate_asset_cmd", {
+    args: { asset_id: assetId },
+  });
+}
+
+export type AssetPreviewDto = {
+  asset_id: string;
+  mime: string;
+  data_url: string;
+  storage_path: string;
+  width?: number | null;
+  height?: number | null;
+};
+
+export async function invokeAssetPreview(assetId: string): Promise<AssetPreviewDto> {
+  return invokeRequired<AssetPreviewDto>("get_asset_preview_cmd", {
     args: { asset_id: assetId },
   });
 }

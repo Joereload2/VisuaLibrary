@@ -11,6 +11,9 @@
     "allow-get-settings",
     "allow-set-media-root",
     "allow-validate-media-root-cmd",
+    "allow-get-integration-config-cmd",
+    "allow-update-integration-config-cmd",
+    "allow-list-script-ai-providers-cmd",
     "allow-list-themes-cmd",
     "allow-ensure-theme-cmd",
     "allow-list-concepts-cmd",
@@ -22,6 +25,8 @@
     "allow-list-library-assets-cmd",
     "allow-approve-asset-cmd",
     "allow-reject-asset-cmd",
+    "allow-propose-needs-from-script-cmd",
+    "allow-list-image-providers-cmd",
     "allow-preview-manual-batch-cmd",
     "allow-submit-manual-batch-cmd",
     "allow-create-plan-cmd",
@@ -33,6 +38,7 @@
     "allow-edit-asset-metadata-cmd",
     "allow-mark-duplicate-cmd",
     "allow-regenerate-asset-cmd",
+    "allow-get-asset-preview-cmd",
     "allow-get-coverage-report-cmd"
   ]
 }

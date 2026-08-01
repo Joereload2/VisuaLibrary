@@ -24,6 +24,21 @@ description = "Allow validating media_root path"
 commands.allow = ["validate_media_root_cmd"]
 
 [[permission]]
+identifier = "allow-get-integration-config-cmd"
+description = "Allow reading integration/API provider config"
+commands.allow = ["get_integration_config_cmd"]
+
+[[permission]]
+identifier = "allow-update-integration-config-cmd"
+description = "Allow updating integration/API provider config"
+commands.allow = ["update_integration_config_cmd"]
+
+[[permission]]
+identifier = "allow-list-script-ai-providers-cmd"
+description = "Allow listing script AI providers"
+commands.allow = ["list_script_ai_providers_cmd"]
+
+[[permission]]
 identifier = "allow-list-themes-cmd"
 description = "Allow listing themes"
 commands.allow = ["list_themes_cmd"]
@@ -79,6 +94,16 @@ description = "Allow rejecting an asset"
 commands.allow = ["reject_asset_cmd"]
 
 [[permission]]
+identifier = "allow-propose-needs-from-script-cmd"
+description = "Allow proposing Manual Factory needs from script"
+commands.allow = ["propose_needs_from_script_cmd"]
+
+[[permission]]
+identifier = "allow-list-image-providers-cmd"
+description = "Allow listing image providers"
+commands.allow = ["list_image_providers_cmd"]
+
+[[permission]]
 identifier = "allow-preview-manual-batch-cmd"
 description = "Allow Manual Factory preview FOUND/GENERATE"
 commands.allow = ["preview_manual_batch_cmd"]
@@ -132,6 +157,11 @@ commands.allow = ["mark_duplicate_cmd"]
 identifier = "allow-regenerate-asset-cmd"
 description = "Allow regenerate asset"
 commands.allow = ["regenerate_asset_cmd"]
+
+[[permission]]
+identifier = "allow-get-asset-preview-cmd"
+description = "Allow reading asset image preview bytes"
+commands.allow = ["get_asset_preview_cmd"]
 
 [[permission]]
 identifier = "allow-get-coverage-report-cmd"

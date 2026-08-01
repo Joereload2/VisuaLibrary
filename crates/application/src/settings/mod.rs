@@ -1,4 +1,4 @@
-mod keys;
+pub mod keys;
 mod service;
 
 pub use keys::*;
