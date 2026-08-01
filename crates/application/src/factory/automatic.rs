@@ -5,6 +5,7 @@ use crate::error::AppError;
 use crate::factory::manual::{
     preview_manual_batch, submit_manual_batch, ManualBatchPreview, ManualNeed,
 };
+use crate::integrations::IntegrationConfig;
 use crate::jobs::MediaWriter;
 use crate::ports::assets::AssetStore;
 use crate::ports::catalog::CatalogStore;
@@ -73,11 +74,18 @@ pub fn run_automatic_from_plan(
             orientation: Some(constraints_field(&item.constraints_json, "orientation")),
             style: Some(constraints_field(&item.constraints_json, "style")),
             provider: Some("stub".into()),
+            script_excerpt: None,
+            ai_instructions: None,
+            pedagogical_intent: Some("plan automatic item".into()),
+            included: Some(true),
+            variant_count: Some(1),
+            also_generate_if_found: Some(false),
         });
     }
 
     // Preview first to classify, then submit only generates.
-    let _preview = preview_manual_batch(catalog, assets, &needs)?;
+    let mut cfg = IntegrationConfig::default();
+    let _preview = preview_manual_batch(catalog, assets, &needs, &cfg)?;
     let batch = submit_manual_batch(
         catalog,
         assets,
@@ -85,13 +93,15 @@ pub fn run_automatic_from_plan(
         media,
         &needs,
         Some(&format!("auto:{plan_id}")),
+        &mut cfg,
     )?;
 
-    // Update item statuses: found → fulfilled; generate → scheduled.
+    // Update item statuses:
+    // found → fulfilled; generate / pending_review → scheduled (awaiting Review).
     for (item, result) in pending.iter().zip(batch.results.iter()) {
         let st = match result.decision.as_str() {
             "found" => "fulfilled",
-            "generate" => "scheduled",
+            "found_enrich" | "generate" | "pending_review" => "scheduled",
             _ => "pending",
         };
         plans.update_item_status(&item.id, st)?;
