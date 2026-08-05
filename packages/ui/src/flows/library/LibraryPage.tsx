@@ -12,11 +12,15 @@ import {
 } from "../../shared/ipc/client";
 
 type LoadState = "loading" | "ready" | "unavailable";
+type LibTab = "assets" | "concepts" | "tools";
 
 export function LibraryPage() {
   const [load, setLoad] = useState<LoadState>("loading");
+  const [tab, setTab] = useState<LibTab>("assets");
   const [concepts, setConcepts] = useState<ConceptDto[]>([]);
   const [assets, setAssets] = useState<AssetDto[]>([]);
+  const [assetTab, setAssetTab] = useState(0);
+  const [conceptTab, setConceptTab] = useState(0);
   const [health, setHealth] = useState<string>("…");
   const [key, setKey] = useState("demo-subject");
   const [name, setName] = useState("Demo subject");
@@ -93,113 +97,163 @@ export function LibraryPage() {
     }
   }
 
+  const activeAsset = assets[assetTab];
+  const activeConcept = concepts[conceptTab];
+
   return (
     <section className="station">
       <header>
         <h2>Library</h2>
         <p>
-          Solo assets <strong>approved</strong>. Generar stub manda a Waiting Review (nunca
-          directo a Library).
+          Solo <strong>approved</strong>. Stub → Waiting Review (nunca directo a Library). Sin
+          scroll.
         </p>
       </header>
 
       {load === "loading" ? (
-        <div className="placeholder-card">
+        <div className="placeholder-card fill">
           <p>Cargando…</p>
         </div>
       ) : null}
 
       {load === "unavailable" ? (
-        <div className="placeholder-card">
+        <div className="placeholder-card fill">
           <h3>Modo UI-only</h3>
           <p>{health}</p>
         </div>
       ) : null}
 
       {load === "ready" ? (
-        <>
-          <div className="placeholder-card">
-            <h3>Assets approved ({assets.length})</h3>
-            {assets.length === 0 ? (
-              <p>Empty: aún no hay recursos en Library. Aprueba algo en Review.</p>
-            ) : (
-              <ul>
-                {assets.map((a) => (
-                  <li key={a.id}>
-                    <code>{a.id.slice(0, 16)}…</code> — {a.storage_path}{" "}
-                    <span style={{ color: "var(--text-muted)" }}>({a.status})</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+        <div className="station-body">
+          <div className="tab-strip">
+            <button
+              type="button"
+              className={`tab-btn${tab === "assets" ? " active" : ""}`}
+              onClick={() => setTab("assets")}
+            >
+              Assets ({assets.length})
+            </button>
+            <button
+              type="button"
+              className={`tab-btn${tab === "concepts" ? " active" : ""}`}
+              onClick={() => setTab("concepts")}
+            >
+              Conceptos ({concepts.length})
+            </button>
+            <button
+              type="button"
+              className={`tab-btn${tab === "tools" ? " active" : ""}`}
+              onClick={() => setTab("tools")}
+            >
+              Tools
+            </button>
           </div>
 
-          <div className="placeholder-card" style={{ marginTop: "1rem" }}>
-            <h3>Conceptos ({concepts.length})</h3>
-            {concepts.length === 0 ? (
-              <p>Empty: crea un concepto y/o genera stub.</p>
-            ) : (
-              <ul>
-                {concepts.map((c) => (
-                  <li key={c.id}>
-                    <code>{c.key}</code> — {c.name}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <div className="placeholder-card fill">
+            {tab === "assets" ? (
+              assets.length === 0 ? (
+                <p>Empty: aprueba algo en Review.</p>
+              ) : (
+                <>
+                  <div className="tab-strip">
+                    {assets.map((a, i) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        className={`tab-btn${assetTab === i ? " active" : ""}`}
+                        onClick={() => setAssetTab(i)}
+                      >
+                        #{i + 1}
+                      </button>
+                    ))}
+                  </div>
+                  {activeAsset ? (
+                    <p style={{ margin: 0, fontSize: "0.9rem" }}>
+                      <code>{activeAsset.id}</code>
+                      <br />
+                      {activeAsset.storage_path} · {activeAsset.status}
+                      {activeAsset.provider ? ` · ${activeAsset.provider}` : ""}
+                    </p>
+                  ) : null}
+                </>
+              )
+            ) : null}
 
-          <div className="placeholder-card" style={{ marginTop: "1rem" }}>
-            <h3>Ensure concept + generate stub</h3>
-            <form onSubmit={onEnsure}>
-              <label htmlFor="c_key">key</label>
-              <input
-                id="c_key"
-                value={key}
-                onChange={(ev) => setKey(ev.target.value)}
-                style={inputStyle}
-                required
-              />
-              <label htmlFor="c_name" style={{ display: "block", marginTop: 8 }}>
-                name
-              </label>
-              <input
-                id="c_name"
-                value={name}
-                onChange={(ev) => setName(ev.target.value)}
-                style={inputStyle}
-              />
-              <div style={{ marginTop: "0.75rem", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button type="submit" disabled={busy} style={btnStyle}>
-                  Ensure concept
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  style={btnStyle}
-                  onClick={() => void onGenerateStub()}
+            {tab === "concepts" ? (
+              concepts.length === 0 ? (
+                <p>Empty: crea un concepto en Tools.</p>
+              ) : (
+                <>
+                  <div className="tab-strip">
+                    {concepts.map((c, i) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className={`tab-btn${conceptTab === i ? " active" : ""}`}
+                        onClick={() => setConceptTab(i)}
+                      >
+                        {c.key}
+                      </button>
+                    ))}
+                  </div>
+                  {activeConcept ? (
+                    <p style={{ margin: 0 }}>
+                      <code>{activeConcept.key}</code> — {activeConcept.name}
+                    </p>
+                  ) : null}
+                </>
+              )
+            ) : null}
+
+            {tab === "tools" ? (
+              <form onSubmit={onEnsure}>
+                <h3>Ensure concept + generate stub</h3>
+                <label htmlFor="c_key" style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                  key
+                </label>
+                <input
+                  id="c_key"
+                  value={key}
+                  onChange={(ev) => setKey(ev.target.value)}
+                  style={inputStyle}
+                  required
+                />
+                <label
+                  htmlFor="c_name"
+                  style={{ display: "block", marginTop: 8, fontSize: "0.8rem", color: "var(--text-muted)" }}
                 >
-                  Generate stub → Waiting Review
-                </button>
-              </div>
-            </form>
-            {message ? (
-              <p className="health" style={{ color: "var(--accent)" }}>
-                {message}
-              </p>
-            ) : null}
-            {error ? (
-              <p className="health" style={{ color: "#f87171" }}>
-                {error}
-              </p>
+                  name
+                </label>
+                <input
+                  id="c_name"
+                  value={name}
+                  onChange={(ev) => setName(ev.target.value)}
+                  style={inputStyle}
+                />
+                <div style={{ marginTop: "0.75rem", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button type="submit" disabled={busy} style={btnStyle}>
+                    Ensure concept
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    style={btnStyle}
+                    onClick={() => void onGenerateStub()}
+                  >
+                    Generate stub → Review
+                  </button>
+                </div>
+              </form>
             ) : null}
           </div>
-        </>
-      ) : null}
 
-      <p className="health">
-        Backend: <code>{health}</code>
-      </p>
+          {message ? <p className="health msg-ok">{message}</p> : null}
+          {error ? <p className="health msg-err">{error}</p> : null}
+          <p className="health">
+            Backend: <code>{health}</code>
+          </p>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -10,14 +10,15 @@ use visual_library_application::{
     ensure_concept, ensure_representation, ensure_theme, generate_stub_asset, get_asset_preview,
     get_coverage_report, get_integration_config_dto, get_plan_with_items,
     get_settings as load_settings, list_concepts, list_image_providers_with_config,
-    list_library_assets, list_plans, list_representations, list_script_ai_providers, list_themes,
-    list_waiting_review, load_integration_config, mark_asset_duplicate, media_writer_for,
-    preview_manual_batch, propose_needs_with_config, regenerate_asset, reject_asset,
-    run_automatic_from_plan, save_integration_config, submit_manual_batch,
-    update_integration_config, update_media_root, validate_media_root, AppPathsDto, AssetDto,
-    AssetPreviewDto, AutomaticRunResult, ConceptDto, CoverageReport, GenerateStubInput,
-    GenerateStubResult, ImageProviderInfo, IntegrationConfigDto, IntegrationConfigUpdate,
-    ManualBatchPreview, ManualNeed, PlanDto, PlanItemDto, PlanWithItemsDto, ProposeNeedsResult,
+    list_library_assets, list_omniroute_model_catalog, list_plans, list_representations,
+    list_script_ai_providers, list_themes, list_waiting_review, load_integration_config,
+    mark_asset_duplicate, media_writer_for, preview_manual_batch, probe_omniroute,
+    propose_needs_with_config, regenerate_asset, reject_asset, run_automatic_from_plan,
+    save_integration_config, submit_manual_batch, update_integration_config, update_media_root,
+    validate_media_root, AppPathsDto, AssetDto, AssetPreviewDto, AutomaticRunResult, ConceptDto,
+    CoverageReport, GenerateStubInput, GenerateStubResult, ImageProviderInfo, IntegrationConfigDto,
+    IntegrationConfigUpdate, ManualBatchPreview, ManualNeed, OmniRouteModelCatalog,
+    OmniRouteProbeResult, PlanDto, PlanItemDto, PlanWithItemsDto, ProposeNeedsResult,
     RepresentationDto, ScriptAiProviderInfo, SettingsDto, ThemeDto, PRODUCT_NAME,
 };
 use visual_library_infrastructure::{bootstrap, infrastructure_health, Platform};
@@ -38,7 +39,9 @@ fn media_root(state: &AppState) -> Result<PathBuf, CommandError> {
     Ok(PathBuf::from(s.media_root))
 }
 
-fn integrations(state: &AppState) -> Result<visual_library_application::IntegrationConfig, CommandError> {
+fn integrations(
+    state: &AppState,
+) -> Result<visual_library_application::IntegrationConfig, CommandError> {
     load_integration_config(store(state)).map_err(CommandError::from)
 }
 
@@ -200,6 +203,8 @@ fn generate_stub_asset_cmd(
             representation_id: args.representation_id,
             prompt: args.prompt,
             provider: Some(cfg.default_image_provider.clone()),
+            orientation: None,
+            style: None,
             idempotency_key: args.idempotency_key,
         },
         &mut cfg,
@@ -293,14 +298,18 @@ fn regenerate_asset_cmd(
 ) -> Result<GenerateStubResult, CommandError> {
     let root = media_root(&state)?;
     let writer = media_writer_for(&root);
-    regenerate_asset(
+    let mut cfg = integrations(&state)?;
+    let res = regenerate_asset(
         store(&state),
         store(&state),
         store(&state),
         &writer,
         &args.asset_id,
+        &mut cfg,
     )
-    .map_err(CommandError::from)
+    .map_err(CommandError::from)?;
+    let _ = save_integration_config(store(&state), &cfg);
+    Ok(res)
 }
 
 #[tauri::command]
@@ -327,6 +336,8 @@ struct ManualBatchArgs {
 struct ProposeNeedsArgs {
     script: String,
     max_needs: Option<usize>,
+    /// Optional brief from Factory “Instrucciones” merged into the chat user message.
+    extra_instructions: Option<String>,
 }
 
 #[tauri::command]
@@ -334,8 +345,20 @@ fn propose_needs_from_script_cmd(
     state: State<'_, AppState>,
     args: ProposeNeedsArgs,
 ) -> Result<ProposeNeedsResult, CommandError> {
-    let cfg = integrations(&state)?;
-    propose_needs_with_config(&args.script, args.max_needs, &cfg).map_err(CommandError::from)
+    let mut cfg = integrations(&state)?;
+    let res = propose_needs_with_config(
+        &args.script,
+        args.max_needs,
+        &cfg,
+        args.extra_instructions.as_deref(),
+    )
+    .map_err(CommandError::from)?;
+    // Persist usage if OmniRoute chat billed free units (best-effort; cfg may be unchanged).
+    if res.method.starts_with("omniroute_chat") {
+        let _ = visual_library_application::record_usage(&mut cfg, "omniroute", 1);
+        let _ = save_integration_config(store(&state), &cfg);
+    }
+    Ok(res)
 }
 
 #[tauri::command]
@@ -367,6 +390,33 @@ fn update_integration_config_cmd(
     args: IntegrationConfigUpdate,
 ) -> Result<IntegrationConfigDto, CommandError> {
     update_integration_config(store(&state), args).map_err(CommandError::from)
+}
+
+#[derive(Debug, Deserialize)]
+struct ProbeOmniRouteArgs {
+    /// If true, runs a tiny image generation (may consume free quota).
+    try_image: Option<bool>,
+    /// If true, runs a tiny chat completion.
+    try_chat: Option<bool>,
+}
+
+#[tauri::command]
+fn probe_omniroute_cmd(
+    state: State<'_, AppState>,
+    args: Option<ProbeOmniRouteArgs>,
+) -> Result<OmniRouteProbeResult, CommandError> {
+    let cfg = integrations(&state)?;
+    let try_image = args.as_ref().and_then(|a| a.try_image).unwrap_or(true);
+    let try_chat = args.as_ref().and_then(|a| a.try_chat).unwrap_or(true);
+    Ok(probe_omniroute(&cfg, try_image, try_chat))
+}
+
+#[tauri::command]
+fn list_omniroute_models_cmd(
+    state: State<'_, AppState>,
+) -> Result<OmniRouteModelCatalog, CommandError> {
+    let cfg = integrations(&state)?;
+    Ok(list_omniroute_model_catalog(&cfg))
 }
 
 #[tauri::command]
@@ -507,6 +557,8 @@ pub fn run() {
             validate_media_root_cmd,
             get_integration_config_cmd,
             update_integration_config_cmd,
+            probe_omniroute_cmd,
+            list_omniroute_models_cmd,
             list_script_ai_providers_cmd,
             list_themes_cmd,
             ensure_theme_cmd,

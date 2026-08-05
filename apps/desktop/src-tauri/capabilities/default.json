@@ -13,6 +13,8 @@
     "allow-validate-media-root-cmd",
     "allow-get-integration-config-cmd",
     "allow-update-integration-config-cmd",
+    "allow-probe-omniroute-cmd",
+    "allow-list-omniroute-models-cmd",
     "allow-list-script-ai-providers-cmd",
     "allow-list-themes-cmd",
     "allow-ensure-theme-cmd",

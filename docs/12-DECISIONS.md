@@ -428,6 +428,29 @@ Estado: `Accepted` | `Proposed` | `Superseded`.
 
 ---
 
+### D-039 — Provider catalog foundation (docs + scoring, no SDK)
+
+| | |
+|--|--|
+| **Estado** | Accepted |
+| **Contexto** | Brief de catálogo exhaustivo de proveedores de imagen. Riesgo de scope infinito y datos no medidos. |
+| **Decisión** | (1) Taxonomía kind: `local_stub` / `gateway` / `remote_api` / `local_runtime`. (2) Tier 0 runtime vs Tier 1 research en `docs/providers/`. (3) Benchmark de 20 prompts educativos fijo. (4) Scoring con pesos Automatic free-first en runtime (`score_image_provider`). (5) No implementar Provider SDK ni nuevos HTTP hasta approve por provider. OmniRoute es gateway, no modelo de imagen. |
+| **Alternativas** | Catálogo de 40+ vendors en código; integrar todos a la vez; tratar OmniRoute como generador. |
+| **Consecuencias** | Investigación en docs; IDs reservados documentados; selección alineada a scoring; adapters uno a uno. |
+
+---
+
+
+### D-040 — Reglas de calidad de código + quality gate
+
+| | |
+|--|--|
+| **Estado** | Accepted |
+| **Contexto** | Documento de reglas de calidad (SOLID/DRY/KISS, Rust, TS, SQL, CSS). Necesidad de norma y verificación automatizable sin big-bang refactor. |
+| **Decisión** | Adoptar `docs/reglas-calidad-codigo.md` como estilo obligatorio para **código nuevo y archivos tocados**. Gate: `pnpm quality` = `cargo fmt --check` + `clippy` (-W correctness; strict con `-D warnings`) + `cargo test` + `tsc` + vitest. Scripts: `scripts/check-quality.ps1` / `.sh`. Legado no tocado no se reescribe solo por cumplir el doc. |
+| **Alternativas** | Solo convención informal; clippy deny-all desde día 1 (rompe legado); reescritura masiva. |
+| **Consecuencias** | Playbook y START-HERE enlazan el doc; IA aplica secciones por stack; CI puede enganchar `pnpm quality` más adelante. |
+
 ## 3. Decisiones propuestas (abiertas)
 
 ### P-001 — Auto-ensure de Concept/Representation en Manual Factory
@@ -477,4 +500,5 @@ Estado: `Accepted` | `Proposed` | `Superseded`.
 
 - Non-goals: [13-NON_GOALS.md](./13-NON_GOALS.md)  
 - Architecture: [03-ARCHITECTURE.md](./03-ARCHITECTURE.md)  
-- Domain: [02-DOMAIN.md](./02-DOMAIN.md)
+- Domain: [02-DOMAIN.md](./02-DOMAIN.md)  
+- Providers: [providers/README.md](./providers/README.md)  

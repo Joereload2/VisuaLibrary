@@ -30,6 +30,7 @@ Construir **software** (verificable, reversible, documentado), no código suelto
 | Producto / MVP | `PRODUCT.md` |
 | Arquitectura | `ARCHITECTURE.md` |
 | Ingeniería | `constitution/ENGINEERING.md` |
+| **Calidad de código (estilo)** | **`reglas-calidad-codigo.md`** (Rust / TS / SQL / CSS) |
 | UX/UI | `constitution/UX_UI.md` |
 | Testing | `constitution/TESTING.md` |
 | Seguridad | `constitution/SECURITY.md` |
@@ -50,6 +51,19 @@ Conflicto → gana la tabla de arriba + ADR aceptados.
 | Cierre | + TESTING + DONE |
 
 **No** releer todo el repo en cada tarea (escala a cientos de pantallas).
+
+### Calidad de código (automático)
+
+Al implementar o revisar, aplicar [`reglas-calidad-codigo.md`](./reglas-calidad-codigo.md):
+
+- Detectar stack (`Cargo.toml`, `package.json`, migraciones SQL) y la sección correspondiente.
+- **Código nuevo** y **archivos tocados** deben cumplir; no reescribir el monorepo entero sin pedirlo.
+- Verificar con `pnpm quality` (fmt + clippy + tests Rust + tsc + vitest).
+
+```text
+Revisa/aplica docs/reglas-calidad-codigo.md según el stack detectado.
+Corrige lo tocado o señala pendientes. Corre pnpm quality.
+```
 
 ---
 

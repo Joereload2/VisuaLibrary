@@ -10,11 +10,14 @@ import {
 } from "../../shared/ipc/client";
 
 type LoadState = "loading" | "ready" | "unavailable";
+type DetailTab = "items" | "edit";
 
 export function PlansPage() {
   const [load, setLoad] = useState<LoadState>("loading");
   const [plans, setPlans] = useState<PlanDto[]>([]);
   const [selected, setSelected] = useState<PlanWithItemsDto | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>("items");
+  const [itemTab, setItemTab] = useState(0);
   const [name, setName] = useState("Coverage growth");
   const [conceptKey, setConceptKey] = useState("river");
   const [repKey, setRepKey] = useState("wide");
@@ -53,6 +56,8 @@ export function PlansPage() {
     try {
       const detail = await invokeGetPlan(id);
       setSelected(detail);
+      setItemTab(0);
+      setDetailTab("items");
     } catch (err) {
       setError(String((err as { message?: string })?.message ?? err));
     }
@@ -65,7 +70,7 @@ export function PlansPage() {
     setError(null);
     try {
       const p = await invokeCreatePlan(name.trim());
-      setMessage(`Plan draft creado: ${p.name}`);
+      setMessage(`Plan draft: ${p.name}`);
       await refresh();
       await selectPlan(p.id);
     } catch (err) {
@@ -85,13 +90,9 @@ export function PlansPage() {
         planId: selected.plan.id,
         conceptKey: conceptKey.trim(),
         representationKey: repKey.trim(),
-        orientation: "any",
-        style: "any",
       });
-      setMessage("Item añadido (solo draft).");
+      setMessage("Item añadido.");
       await selectPlan(selected.plan.id);
-      const list = await invokeListPlans();
-      setPlans(list);
     } catch (err) {
       setError(String((err as { message?: string })?.message ?? err));
     } finally {
@@ -105,9 +106,7 @@ export function PlansPage() {
     setError(null);
     try {
       const p = await invokeApprovePlan(selected.plan.id);
-      setMessage(
-        `Plan approved — habilita Automatic Factory (no genera). Status: ${p.status}`,
-      );
+      setMessage(`Approved — habilita Automatic (no genera). ${p.status}`);
       await selectPlan(p.id);
       const list = await invokeListPlans();
       setPlans(list);
@@ -118,151 +117,159 @@ export function PlansPage() {
     }
   }
 
+  const activeItem = selected?.items[itemTab];
+
   return (
     <section className="station">
       <header>
         <h2>Plans</h2>
         <p>
-          Decide <strong>qué</strong> generar. Approve no llama providers. Automatic Factory ejecuta
-          planes approved.
+          Decide <strong>qué</strong> generar. Approve ≠ providers. Sin scroll: pestañas.
         </p>
       </header>
 
       {load === "unavailable" ? (
-        <div className="placeholder-card">
+        <div className="placeholder-card fill">
           <p>IPC no disponible. Usa `pnpm dev`.</p>
         </div>
       ) : null}
 
       {load === "ready" ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 32%) minmax(0, 68%)",
-            gap: "1rem",
-          }}
-        >
-          <div className="placeholder-card">
-            <h3>Planes ({plans.length})</h3>
+        <div className="station-body">
+          <div className="tab-strip">
+            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Planes</span>
             {plans.length === 0 ? (
-              <p>Empty: crea un plan draft.</p>
+              <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>vacío</span>
             ) : (
-              <ul style={{ listStyle: "none", padding: 0 }}>
-                {plans.map((p) => (
-                  <li key={p.id} style={{ marginBottom: 6 }}>
-                    <button
-                      type="button"
-                      onClick={() => void selectPlan(p.id)}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "0.5rem",
-                        borderRadius: 8,
-                        border:
-                          selected?.plan.id === p.id
-                            ? "2px solid var(--accent)"
-                            : "1px solid var(--border)",
-                        background:
-                          selected?.plan.id === p.id
-                            ? "var(--accent-soft)"
-                            : "transparent",
-                        color: "var(--text)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {p.name}{" "}
-                      <span style={{ color: "var(--text-muted)" }}>({p.status})</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              plans.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`tab-btn${selected?.plan.id === p.id ? " active" : ""}`}
+                  onClick={() => void selectPlan(p.id)}
+                >
+                  {p.name} · {p.status}
+                </button>
+              ))
             )}
-
-            <form onSubmit={onCreate} style={{ marginTop: 12 }}>
-              <label htmlFor="plan_name">Nuevo plan</label>
-              <input
-                id="plan_name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                style={inputStyle}
-                required
-              />
-              <button type="submit" disabled={busy} style={btnStyle}>
-                Create draft
-              </button>
-            </form>
           </div>
 
-          <div className="placeholder-card">
+          <div className="placeholder-card fill">
             {!selected ? (
-              <p>Selecciona un plan.</p>
+              <form onSubmit={onCreate}>
+                <h3>Nuevo plan draft</h3>
+                <label style={labelStyle}>Nombre</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+                <button type="submit" disabled={busy} style={btnStyle}>
+                  Create draft
+                </button>
+              </form>
             ) : (
               <>
-                <h3>
-                  {selected.plan.name} — <code>{selected.plan.status}</code>
-                </h3>
-                <p style={{ color: "var(--text-muted)" }}>
-                  Items: {selected.items.length}. Approve no genera assets.
-                </p>
-                <ul>
-                  {selected.items.map((i) => (
-                    <li key={i.id}>
-                      {i.concept_key}/{i.representation_key} — {i.status}
-                    </li>
-                  ))}
-                </ul>
+                <div className="tab-strip">
+                  <button
+                    type="button"
+                    className={`tab-btn${detailTab === "items" ? " active" : ""}`}
+                    onClick={() => setDetailTab("items")}
+                  >
+                    Items ({selected.items.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab-btn${detailTab === "edit" ? " active" : ""}`}
+                    onClick={() => setDetailTab("edit")}
+                  >
+                    {selected.plan.status === "draft" ? "Editar / Approve" : "Info"}
+                  </button>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                    {selected.plan.name} · <code>{selected.plan.status}</code>
+                  </span>
+                </div>
 
-                {selected.plan.status === "draft" ? (
+                {detailTab === "items" ? (
+                  selected.items.length === 0 ? (
+                    <p>Sin items. Ve a Editar para añadir.</p>
+                  ) : (
+                    <>
+                      <div className="tab-strip">
+                        {selected.items.map((it, i) => (
+                          <button
+                            key={it.id}
+                            type="button"
+                            className={`tab-btn${itemTab === i ? " active" : ""}`}
+                            onClick={() => setItemTab(i)}
+                          >
+                            #{i + 1}
+                          </button>
+                        ))}
+                      </div>
+                      {activeItem ? (
+                        <p style={{ margin: 0, fontSize: "0.9rem" }}>
+                          {activeItem.concept_key}/{activeItem.representation_key} —{" "}
+                          {activeItem.status}
+                        </p>
+                      ) : null}
+                    </>
+                  )
+                ) : selected.plan.status === "draft" ? (
                   <>
-                    <form onSubmit={onAddItem} style={{ marginTop: 12 }}>
-                      <label>concept_key</label>
+                    <form onSubmit={onAddItem}>
+                      <label style={labelStyle}>concept_key</label>
                       <input
                         value={conceptKey}
                         onChange={(e) => setConceptKey(e.target.value)}
                         style={inputStyle}
                         required
                       />
-                      <label style={{ display: "block", marginTop: 8 }}>
-                        representation_key
-                      </label>
+                      <label style={labelStyle}>representation_key</label>
                       <input
                         value={repKey}
                         onChange={(e) => setRepKey(e.target.value)}
                         style={inputStyle}
                         required
                       />
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                        <button type="submit" disabled={busy} style={btnStyle}>
+                          Add item
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy || selected.items.length === 0}
+                          style={btnStyle}
+                          onClick={() => void onApprove()}
+                        >
+                          Approve plan
+                        </button>
+                      </div>
+                    </form>
+                    <form onSubmit={onCreate} style={{ marginTop: 16 }}>
+                      <label style={labelStyle}>Otro plan nuevo</label>
+                      <input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        style={inputStyle}
+                      />
                       <button type="submit" disabled={busy} style={btnStyle}>
-                        Add item
+                        Create draft
                       </button>
                     </form>
-                    <button
-                      type="button"
-                      disabled={busy || selected.items.length === 0}
-                      style={{ ...btnStyle, marginTop: 12 }}
-                      onClick={() => void onApprove()}
-                    >
-                      Approve plan
-                    </button>
                   </>
                 ) : (
                   <p>
-                    Plan approved. Ejecuta en{" "}
-                    <strong>Factory → Automatic</strong>.
+                    Plan approved. Ejecuta en <strong>Factory → Automatic</strong>.
                   </p>
                 )}
               </>
             )}
-            {message ? (
-              <p className="health" style={{ color: "var(--accent)" }}>
-                {message}
-              </p>
-            ) : null}
-            {error ? (
-              <p className="health" style={{ color: "#f87171" }}>
-                {error}
-              </p>
-            ) : null}
           </div>
+
+          {message ? <p className="health msg-ok">{message}</p> : null}
+          {error ? <p className="health msg-err">{error}</p> : null}
         </div>
       ) : null}
     </section>
@@ -271,18 +278,26 @@ export function PlansPage() {
 
 const inputStyle: CSSProperties = {
   width: "100%",
-  maxWidth: "20rem",
+  maxWidth: "24rem",
   display: "block",
-  padding: "0.45rem 0.6rem",
+  padding: "0.4rem 0.55rem",
   borderRadius: 8,
   border: "1px solid var(--border)",
   background: "var(--bg)",
   color: "var(--text)",
-  marginBottom: 8,
+  marginBottom: 6,
+};
+
+const labelStyle: CSSProperties = {
+  display: "block",
+  fontSize: "0.78rem",
+  color: "var(--text-muted)",
+  marginBottom: 3,
+  marginTop: 6,
 };
 
 const btnStyle: CSSProperties = {
-  padding: "0.45rem 0.9rem",
+  padding: "0.4rem 0.8rem",
   borderRadius: 8,
   border: "1px solid var(--border)",
   background: "var(--accent-soft)",

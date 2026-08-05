@@ -58,6 +58,10 @@ export type IntegrationConfigDto = {
   omniroute_image_model: string;
   omniroute_chat_model: string;
   omniroute_prefer_free: boolean;
+  /** System prompt for OmniRoute/Claude script→needs (editable). */
+  needs_system_prompt: string;
+  /** If true, remote image errors become stub tiles (discouraged). Default false. */
+  allow_stub_fallback_on_image_error?: boolean;
   connector_budgets: ConnectorBudgetDto[];
 };
 
@@ -73,6 +77,8 @@ export type IntegrationConfigUpdate = {
   omniroute_image_model?: string | null;
   omniroute_chat_model?: string | null;
   omniroute_prefer_free?: boolean | null;
+  needs_system_prompt?: string | null;
+  allow_stub_fallback_on_image_error?: boolean | null;
   connector_budget_updates?: ConnectorBudgetUpdate[] | null;
 };
 
@@ -336,6 +342,8 @@ export type ManualBatchPreview = {
   found_count: number;
   generate_count: number;
   skipped_count: number;
+  /** Needs blocked because variants already wait in Review. */
+  pending_review_count?: number;
   variant_images?: number;
 };
 
@@ -343,6 +351,7 @@ export type ImageProvider = {
   id: string;
   name: string;
   description?: string;
+  /** Legacy flag; prefer status / can_afford_one from integrations. */
   available?: boolean;
   enabled?: boolean;
   status?: string;
@@ -352,6 +361,8 @@ export type ImageProvider = {
   availability_score: number;
   kind: string;
   notes?: string;
+  can_afford_one?: boolean;
+  is_free?: boolean;
 };
 
 export type ProposeNeedsResult = {
@@ -364,14 +375,57 @@ export type ProposeNeedsResult = {
 export async function invokeProposeNeedsFromScript(
   script: string,
   maxNeeds?: number,
+  extraInstructions?: string | null,
 ): Promise<ProposeNeedsResult> {
   return invokeRequired<ProposeNeedsResult>("propose_needs_from_script_cmd", {
-    args: { script, max_needs: maxNeeds ?? null },
+    args: {
+      script,
+      max_needs: maxNeeds ?? null,
+      extra_instructions: extraInstructions?.trim() ? extraInstructions.trim() : null,
+    },
   });
 }
 
 export async function invokeListImageProviders(): Promise<ImageProvider[]> {
   return invokeRequired<ImageProvider[]>("list_image_providers_cmd");
+}
+
+export type OmniRouteProbeResult = {
+  base_url: string;
+  models_ok: boolean;
+  models_detail: string;
+  images_ok: boolean;
+  images_detail: string;
+  chat_ok: boolean;
+  chat_detail: string;
+  overall_ok: boolean;
+  summary: string;
+};
+
+/** Probe local OmniRoute gateway (models + optional image/chat). */
+export async function invokeProbeOmniroute(opts?: {
+  tryImage?: boolean;
+  tryChat?: boolean;
+}): Promise<OmniRouteProbeResult> {
+  return invokeRequired<OmniRouteProbeResult>("probe_omniroute_cmd", {
+    args: {
+      try_image: opts?.tryImage ?? true,
+      try_chat: opts?.tryChat ?? true,
+    },
+  });
+}
+
+export type OmniRouteModelCatalog = {
+  base_url: string;
+  ok: boolean;
+  detail: string;
+  chat_models: string[];
+  image_models: string[];
+};
+
+/** List chat/image model ids for Settings dropdowns. */
+export async function invokeListOmnirouteModels(): Promise<OmniRouteModelCatalog> {
+  return invokeRequired<OmniRouteModelCatalog>("list_omniroute_models_cmd");
 }
 
 export async function invokePreviewManualBatch(

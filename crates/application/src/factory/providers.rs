@@ -76,9 +76,7 @@ pub fn select_image_provider(preferred: Option<&str>) -> Result<ImageProvider, A
             }
             // Preferred unavailable → fall through to auto-pick (2A: re-elegir).
         } else {
-            return Err(AppError::Validation(format!(
-                "provider desconocido: {id}"
-            )));
+            return Err(AppError::Validation(format!("provider desconocido: {id}")));
         }
     }
     let mut available: Vec<_> = all.into_iter().filter(|p| p.available).collect();
@@ -120,7 +118,8 @@ pub fn build_prompt_template(
          Pedagogical intent: {intent}\n\
          Visual style: {style}; orientation: {orientation}\n\
          Discourse context: {excerpt}\n\
-         Clear, didactic, single subject, no text overlays, high clarity."
+         Clear, didactic, single subject, high clarity.\n\
+         NO text, letters, words, numbers, labels, signs, logos, or captions in the image — drawing only."
     )
 }
 

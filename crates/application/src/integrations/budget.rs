@@ -82,7 +82,7 @@ impl ConnectorLedger {
             },
             "spacexai" | "spacexai-image" => Self {
                 provider_id: provider_id.into(),
-                unit_cost_cents: 2, // placeholder estimate
+                unit_cost_cents: 2,        // placeholder estimate
                 budget_limit_cents: 2_000, // $20 default cap
                 spent_cents: 0,
                 free_quota: 0,

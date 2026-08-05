@@ -38,7 +38,7 @@ pub fn colored_stub_bmp(seed: &str) -> Vec<u8> {
     out.extend_from_slice(&0u16.to_le_bytes());
     out.extend_from_slice(&0u16.to_le_bytes());
     out.extend_from_slice(&54u32.to_le_bytes()); // pixel offset
-    // BITMAPINFOHEADER
+                                                 // BITMAPINFOHEADER
     out.extend_from_slice(&40u32.to_le_bytes());
     out.extend_from_slice(&(w as i32).to_le_bytes());
     out.extend_from_slice(&(h as i32).to_le_bytes()); // bottom-up
@@ -85,7 +85,18 @@ pub struct GenerateStubInput {
     pub prompt: Option<String>,
     /// Selected image provider id (multi-provider; one per generate).
     pub provider: Option<String>,
+    pub orientation: Option<String>,
+    pub style: Option<String>,
     pub idempotency_key: Option<String>,
+}
+
+/// Normalize persisted provider ids (never store synthetic fallback labels as catalog ids).
+pub fn normalize_provider_id(provider: Option<&str>) -> Option<String> {
+    match provider.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(s) if s.starts_with("stub_fallback_from_") => Some("stub".into()),
+        Some(s) => Some(s.to_string()),
+        None => None,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,26 +188,49 @@ pub fn generate_stub_asset(
     let req_id = new_id("greq");
     let ts = now();
 
-    let selected = select_image_provider_with_config(input.provider.as_deref(), cfg)?;
+    let preferred = normalize_provider_id(input.provider.as_deref());
+    let selected = select_image_provider_with_config(preferred.as_deref(), cfg)?;
     let provider_id = selected.id.clone();
-    let prompt_text = input.prompt.clone().unwrap_or_else(|| "visual lesson asset".into());
-    // Adapter: stub works; remote APIs when keys + HTTP connected.
-    let (generated, bill_provider) =
-        match generate_image_bytes(&provider_id, &prompt_text, &asset_id, cfg) {
-            Ok(g) => (g, provider_id.clone()),
-            Err(e) if provider_id != "stub" => {
-                // Graceful fallback so Manual still works while APIs are being wired.
-                let mut g = generate_image_bytes("stub", &prompt_text, &asset_id, cfg)?;
-                g.provider_id = format!("stub_fallback_from_{provider_id}");
-                let _ = e;
-                (g, "stub".into())
-            }
-            Err(e) => return Err(e),
-        };
+    let prompt_text = {
+        let raw = input
+            .prompt
+            .clone()
+            .unwrap_or_else(|| "Educational visual illustration, single subject, clear".into());
+        crate::factory::with_no_text_guard(&raw)
+    };
+    // Remote failure: default = fail loud (no silent stub tile in Review).
+    // Opt-in: cfg.allow_stub_fallback_on_image_error (Settings / advanced).
+    let (generated, bill_provider, fallback_note) = match generate_image_bytes(
+        &provider_id,
+        &prompt_text,
+        &asset_id,
+        cfg,
+    ) {
+        Ok(g) => (g, provider_id.clone(), None),
+        Err(e) if provider_id != "stub" && cfg.allow_stub_fallback_on_image_error => {
+            let mut g = generate_image_bytes("stub", &prompt_text, &asset_id, cfg)?;
+            g.provider_id = "stub".into();
+            let note = format!(
+                "FALLBACK stub: provider `{provider_id}` falló ({e}). \
+                     No es imagen real del provider pedido."
+            );
+            (g, "stub".into(), Some(note))
+        }
+        Err(e) if provider_id != "stub" => {
+            return Err(AppError::Validation(format!(
+                    "No se pudo generar con `{provider_id}`: {e}\n\n\
+                     Qué hacer: arranca OmniRoute / revisa model y base URL (Settings → Keys → Probar e2e), \
+                     o elige provider `stub` en la need solo para probar el flujo.\n\
+                     (No se sustituye en silencio por un tile local — evita confusiones en Review.)"
+                )));
+        }
+        Err(e) => return Err(e),
+    };
     // Track spend / free quota even when free (unit cost 0).
     let _usage = crate::integrations::record_usage(cfg, &bill_provider, 1)?;
     let ext = generated.format.as_str();
-    let rel_path = format!("assets/{provider_id}/{asset_id}.{ext}");
+    // Path must match the provider that actually produced bytes (not the preferred one).
+    let rel_path = format!("assets/{bill_provider}/{asset_id}.{ext}");
 
     let payload = serde_json::json!({
         "concept_id": input.concept_id,
@@ -204,7 +238,7 @@ pub fn generate_stub_asset(
         "asset_id": asset_id,
         "generation_request_id": req_id,
         "relative_path": rel_path,
-        "provider": generated.provider_id,
+        "provider": bill_provider,
     });
 
     let job = JobDto {
@@ -244,12 +278,18 @@ pub fn generate_stub_asset(
         height: Some(generated.height),
         mime: Some(generated.mime.clone()),
         format: Some(generated.format.clone()),
-        orientation: Some("any".into()),
-        style: None,
-        provider: Some(generated.provider_id.clone()),
+        orientation: Some(
+            input
+                .orientation
+                .clone()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "any".into()),
+        ),
+        style: input.style.clone(),
+        provider: Some(bill_provider.clone()),
         prompt: input.prompt,
         generation_request_id: Some(req_id),
-        review_notes: None,
+        review_notes: fallback_note,
         reject_reason: None,
         duplicate_of_asset_id: None,
         approved_at: None,
@@ -308,7 +348,10 @@ impl MediaWriter for FsMediaWriter {
 }
 
 /// Reject absolute paths and `..` components; keep writes under media_root.
-pub fn resolve_under_media_root(media_root: &Path, relative_path: &str) -> Result<PathBuf, AppError> {
+pub fn resolve_under_media_root(
+    media_root: &Path,
+    relative_path: &str,
+) -> Result<PathBuf, AppError> {
     let rel = Path::new(relative_path);
     if rel.is_absolute() {
         return Err(AppError::Validation(
@@ -356,6 +399,29 @@ mod tests {
     use crate::ports::catalog::CatalogStore;
     use std::collections::HashMap;
     use std::sync::Mutex;
+
+    #[test]
+    fn normalize_provider_strips_legacy_fallback_label() {
+        assert_eq!(
+            normalize_provider_id(Some("stub_fallback_from_omniroute")).as_deref(),
+            Some("stub")
+        );
+        assert_eq!(
+            normalize_provider_id(Some("omniroute")).as_deref(),
+            Some("omniroute")
+        );
+        assert_eq!(normalize_provider_id(Some("  ")), None);
+        assert_eq!(normalize_provider_id(None), None);
+    }
+
+    #[test]
+    fn default_config_disallows_silent_stub_fallback() {
+        let cfg = crate::integrations::IntegrationConfig::default();
+        assert!(
+            !cfg.allow_stub_fallback_on_image_error,
+            "silent stub fallback must be off by default"
+        );
+    }
 
     #[derive(Default)]
     struct MemAll {
@@ -608,6 +674,8 @@ mod tests {
                 representation_id: "r1".into(),
                 prompt: None,
                 provider: Some("stub".into()),
+                orientation: None,
+                style: None,
                 idempotency_key: Some("idem-1".into()),
             },
             &mut cfg,
@@ -629,6 +697,8 @@ mod tests {
                 representation_id: "r1".into(),
                 prompt: None,
                 provider: Some("stub".into()),
+                orientation: None,
+                style: None,
                 idempotency_key: Some("idem-1".into()),
             },
             &mut cfg,
@@ -668,6 +738,8 @@ mod tests {
                 representation_id: "r1".into(),
                 prompt: Some("test".into()),
                 provider: Some("stub".into()),
+                orientation: None,
+                style: None,
                 idempotency_key: Some("idem-1".into()),
             },
             &mut cfg,
@@ -690,6 +762,8 @@ mod tests {
                 representation_id: "r1".into(),
                 prompt: None,
                 provider: Some("stub".into()),
+                orientation: None,
+                style: None,
                 idempotency_key: Some("idem-1".into()),
             },
             &mut cfg,

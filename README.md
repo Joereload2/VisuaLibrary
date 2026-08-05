@@ -19,7 +19,11 @@ Empieza aquí: [`docs/00-START-HERE.md`](docs/00-START-HERE.md)
 | Foundation 4 (Manual Factory FOUND/GENERATE) | **Hecha** |
 | Foundation 5 (Plans + Automatic Factory) | **Hecha** |
 | Foundation 6 (Coverage + Review completo) | **Hecha** |
+| OmniRoute + Manual Factory real (imagen/chat) | **Lista** (gateway + keys/pollen) |
+| Catálogo providers + quality gate | **Hecha** (docs + `pnpm quality`) |
 | Scaffold monorepo | Hecha |
+| App alimentadora de guiones | **Siguiente foco de producto** (fuera de este repo) — ver [`docs/SCRIPT-FEEDER-HANDOFF.md`](docs/SCRIPT-FEEDER-HANDOFF.md) |
+| Providers volumen (Fal/…) / import archivo guion | Pendiente al retomar VL |
 | Job recovery / Library search-export / polish | Pendiente (post-MVP UI) |
 
 ## Estructura
@@ -47,21 +51,21 @@ docs/                  # Fundación del producto
 pnpm install
 pnpm test:e2e:install   # browsers Playwright (una vez)
 
-# Calidad Rust (obligatorio si tocas Rust)
+# Calidad de código (docs/reglas-calidad-codigo.md)
+pnpm quality              # fmt check + clippy + tests Rust + tsc + vitest
+pnpm quality:strict       # clippy -D warnings
+pnpm quality:ps1          # mismo gate vía PowerShell
 pnpm fmt:rust
-pnpm check:rust
+pnpm clippy
+pnpm check:ui             # tsc --noEmit
 pnpm test:rust
-pnpm quality:rust
-
-# Frontend tests (Vitest + Testing Library)
 pnpm test:ui
 
 # E2E UI (Playwright sobre Vite — no Tauri completo)
 pnpm test:e2e
 
-# Suite combinada
+# Suite tests
 pnpm test
-pnpm quality
 
 # App desktop (dev)
 pnpm dev
@@ -70,7 +74,7 @@ pnpm dev
 pnpm dev:ui
 ```
 
-**MVP usable (F1–F6):** las 6 estaciones tienen flujo real (stub de generación, no providers IA).
+**MVP usable (F1–F6):** las 6 estaciones tienen flujo real. Generación: `stub` local o **OmniRoute** (OpenAI-compatible) cuando el gateway y las keys están conectados. Entrada de guion hoy: paste en Manual Factory — contrato para la app hermana en el handoff.
 
 ## Navegación MVP (6 flujos)
 

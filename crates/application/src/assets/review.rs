@@ -118,13 +118,17 @@ pub fn mark_asset_duplicate(
 
 /// Supersede current **waiting_review** asset and generate a new stub into waiting_review.
 /// Approved Library assets cannot be regenerated via this path (protect Library gate).
+/// Generates **first**, then supersedes the old asset (avoids losing the queue item on failure).
 pub fn regenerate_asset(
     catalog: &impl CatalogStore,
     assets: &impl AssetStore,
     jobs: &impl JobStore,
     media: &impl MediaWriter,
     asset_id: &str,
+    cfg: &mut IntegrationConfig,
 ) -> Result<GenerateStubResult, AppError> {
+    use crate::jobs::normalize_provider_id;
+
     let asset = assets
         .get(asset_id)?
         .ok_or_else(|| AppError::NotFound(format!("asset {asset_id}")))?;
@@ -136,25 +140,26 @@ pub fn regenerate_asset(
     let from = AssetStatus::parse(&asset.status).ok_or_else(|| {
         AppError::Validation(format!("status de asset desconocido: {}", asset.status))
     })?;
-    let to = supersede(from).map_err(|e| AppError::Validation(e.to_string()))?;
-    assets.update_status(asset_id, to.as_str(), None, None, Some("regenerated"))?;
-
-    // Keep all need metadata (prompt, provider, …); only the image/bytes change.
-    let mut cfg = IntegrationConfig::default();
-    generate_stub_asset(
+    // Generate first so a failure leaves the original still waiting_review.
+    let gen = generate_stub_asset(
         catalog,
         assets,
         jobs,
         media,
         GenerateStubInput {
-            concept_id: asset.concept_id,
-            representation_id: asset.representation_id,
-            prompt: asset.prompt,
-            provider: asset.provider,
+            concept_id: asset.concept_id.clone(),
+            representation_id: asset.representation_id.clone(),
+            prompt: asset.prompt.clone(),
+            provider: normalize_provider_id(asset.provider.as_deref()),
+            orientation: asset.orientation.clone(),
+            style: asset.style.clone(),
             idempotency_key: Some(format!("regen:{asset_id}:{}", now())),
         },
-        &mut cfg,
-    )
+        cfg,
+    )?;
+    let to = supersede(from).map_err(|e| AppError::Validation(e.to_string()))?;
+    assets.update_status(asset_id, to.as_str(), None, None, Some("regenerated"))?;
+    Ok(gen)
 }
 
 #[cfg(test)]
@@ -415,15 +420,13 @@ mod tests {
         }
         struct NoMedia;
         impl MediaWriter for NoMedia {
-            fn write_asset_file(
-                &self,
-                _: &str,
-                _: &[u8],
-            ) -> Result<std::path::PathBuf, AppError> {
+            fn write_asset_file(&self, _: &str, _: &[u8]) -> Result<std::path::PathBuf, AppError> {
                 unreachable!()
             }
         }
-        let err = regenerate_asset(&EmptyCat, &store, &EmptyJobs, &NoMedia, "a1").unwrap_err();
+        let mut cfg = IntegrationConfig::default();
+        let err =
+            regenerate_asset(&EmptyCat, &store, &EmptyJobs, &NoMedia, "a1", &mut cfg).unwrap_err();
         assert!(err.to_string().contains("waiting_review"));
     }
 }

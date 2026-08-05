@@ -11,7 +11,7 @@ use crate::settings::keys;
 /// Local integration config (desktop). Secrets stay on machine only.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct IntegrationConfig {
-    /// `heuristic` | `spacexai` (others: register + connect).
+    /// `heuristic` | `spacexai` | `omniroute` (Claude u otro chat vía gateway).
     pub script_ai_provider: String,
     /// Preferred image provider id for Manual when need has no override.
     pub default_image_provider: String,
@@ -29,11 +29,19 @@ pub struct IntegrationConfig {
     /// Image model id as seen by OmniRoute (e.g. auto, pollinations/..., free stack).
     #[serde(default = "default_omniroute_image_model")]
     pub omniroute_image_model: String,
+    /// Chat model for script→needs (e.g. auto, claude-…, anthropic/… según OmniRoute).
     #[serde(default = "default_omniroute_chat_model")]
     pub omniroute_chat_model: String,
     /// Prefer free-tier routing when selecting providers / models.
     #[serde(default = "default_true")]
     pub omniroute_prefer_free: bool,
+    /// System prompt for script→needs (OmniRoute/Claude). Editable in Settings.
+    #[serde(default = "default_needs_system_prompt")]
+    pub needs_system_prompt: String,
+    /// If true, remote image failure silently becomes local stub (discouraged).
+    /// Default false: fail loud so Review never shows a fake tile as if OmniRoute worked.
+    #[serde(default)]
+    pub allow_stub_fallback_on_image_error: bool,
     /// Presupuesto y gasto por conector (incl. free).
     #[serde(default)]
     pub connector_ledgers: Vec<ConnectorLedger>,
@@ -43,18 +51,66 @@ fn default_omniroute_base() -> String {
     "http://127.0.0.1:20128/v1".into()
 }
 fn default_omniroute_image_model() -> String {
-    "auto".into()
+    // OmniRoute exige `provider/model` (no bare "auto").
+    // pollinations/* suele ir free/keyless; cambia en Settings si tu gateway lista otros.
+    "pollinations/flux".into()
 }
 fn default_omniroute_chat_model() -> String {
-    "auto".into()
+    // Bare "auto" falla en OmniRoute actual; combos usan prefijo auto/...
+    "auto/best-free".into()
 }
 fn default_true() -> bool {
     true
 }
 
+/// Default system prompt for needs extraction (Claude / any chat via OmniRoute).
+pub fn default_needs_system_prompt() -> String {
+    r#"You are a pedagogical visual designer for educational YouTube lessons (Visual Library).
+
+Task: from the lesson SCRIPT, extract structured visual NEEDS (database requirements), not random image ideas.
+
+Rules:
+- Needs = concept + representation + metadata ready for a visual asset library.
+- Prefer clear didactic single-subject illustrations.
+- CRITICAL for image prompts: teach by DRAWING ONLY. Never request text, letters, words, numbers, captions, labels, signs, logos, watermarks, UI, or readable writing (models garble text). Diagrams = shapes, arrows as pure graphics, color — not written words.
+- concept_key: lowercase slug, ASCII, hyphen or underscore (e.g. photosynthesis, water-cycle).
+- representation_key: short slug (e.g. lesson, diagram, detail, wide).
+- variant_count: integer 1–3 (default 3) — later the app generates literal/metaphor/style variants.
+- orientation: landscape | portrait | any (prefer landscape for YouTube).
+- style: short tag (e.g. didactic, diagram, realistic-simple).
+- prompt: prefer English for image models; concrete visual description; no words in the frame.
+- script_excerpt: short quote or paraphrase of the script segment this need covers.
+- pedagogical_intent: what the image should teach/clarify without relying on written words.
+- script_instructions: global brief still forbidding text inside images.
+
+Reply with ONLY valid JSON (no markdown fences, no commentary):
+{
+  "script_instructions": "string",
+  "needs": [
+    {
+      "concept_key": "string",
+      "concept_name": "string",
+      "representation_key": "string",
+      "representation_name": "string",
+      "prompt": "string",
+      "orientation": "landscape",
+      "style": "didactic",
+      "script_excerpt": "string",
+      "pedagogical_intent": "string",
+      "ai_instructions": "string",
+      "variant_count": 3
+    }
+  ]
+}
+
+Respect max_needs. Stay faithful to the script; do not invent unrelated topics."#
+        .into()
+}
+
 impl Default for IntegrationConfig {
     fn default() -> Self {
         let mut s = Self {
+            // Offline-safe default; switch to "omniroute" in Settings when gateway is up.
             script_ai_provider: "heuristic".into(),
             default_image_provider: "stub".into(),
             enabled_image_providers: vec!["stub".into(), "omniroute".into()],
@@ -66,6 +122,8 @@ impl Default for IntegrationConfig {
             omniroute_image_model: default_omniroute_image_model(),
             omniroute_chat_model: default_omniroute_chat_model(),
             omniroute_prefer_free: true,
+            needs_system_prompt: default_needs_system_prompt(),
+            allow_stub_fallback_on_image_error: false,
             connector_ledgers: vec![],
         };
         ensure_default_ledgers(&mut s);
@@ -91,6 +149,9 @@ pub struct IntegrationConfigDto {
     pub omniroute_image_model: String,
     pub omniroute_chat_model: String,
     pub omniroute_prefer_free: bool,
+    /// System prompt used for OmniRoute/Claude script→needs.
+    pub needs_system_prompt: String,
+    pub allow_stub_fallback_on_image_error: bool,
     pub connector_budgets: Vec<ConnectorBudgetDto>,
 }
 
@@ -107,6 +168,8 @@ pub struct IntegrationConfigUpdate {
     pub omniroute_image_model: Option<String>,
     pub omniroute_chat_model: Option<String>,
     pub omniroute_prefer_free: Option<bool>,
+    pub needs_system_prompt: Option<String>,
+    pub allow_stub_fallback_on_image_error: Option<bool>,
     pub connector_budget_updates: Option<Vec<ConnectorBudgetUpdate>>,
 }
 
@@ -139,6 +202,12 @@ impl IntegrationConfig {
             omniroute_image_model: self.omniroute_image_model.clone(),
             omniroute_chat_model: self.omniroute_chat_model.clone(),
             omniroute_prefer_free: self.omniroute_prefer_free,
+            needs_system_prompt: if self.needs_system_prompt.trim().is_empty() {
+                default_needs_system_prompt()
+            } else {
+                self.needs_system_prompt.clone()
+            },
+            allow_stub_fallback_on_image_error: self.allow_stub_fallback_on_image_error,
             connector_budgets: list_connector_budgets(self),
         }
     }
@@ -177,6 +246,16 @@ impl IntegrationConfig {
         if let Some(v) = u.omniroute_prefer_free {
             self.omniroute_prefer_free = v;
         }
+        if let Some(v) = u.needs_system_prompt {
+            self.needs_system_prompt = if v.trim().is_empty() {
+                default_needs_system_prompt()
+            } else {
+                v
+            };
+        }
+        if let Some(v) = u.allow_stub_fallback_on_image_error {
+            self.allow_stub_fallback_on_image_error = v;
+        }
         if !self.enabled_image_providers.iter().any(|p| p == "stub") {
             self.enabled_image_providers.push("stub".into());
         }
@@ -186,6 +265,10 @@ impl IntegrationConfig {
             }
         }
         ensure_default_ledgers(self);
+        // Older saved configs may lack needs_system_prompt (empty after partial deserialize edge).
+        if self.needs_system_prompt.trim().is_empty() {
+            self.needs_system_prompt = default_needs_system_prompt();
+        }
         Ok(())
     }
 }
@@ -193,10 +276,12 @@ impl IntegrationConfig {
 pub fn load_integration_config(store: &impl SettingsStore) -> Result<IntegrationConfig, AppError> {
     let mut cfg = match store.get_json(keys::INTEGRATIONS)? {
         None => IntegrationConfig::default(),
-        Some(raw) => serde_json::from_str(&raw).map_err(|e| {
-            AppError::Storage(format!("settings.integrations JSON inválido: {e}"))
-        })?,
+        Some(raw) => serde_json::from_str(&raw)
+            .map_err(|e| AppError::Storage(format!("settings.integrations JSON inválido: {e}")))?,
     };
+    if cfg.needs_system_prompt.trim().is_empty() {
+        cfg.needs_system_prompt = default_needs_system_prompt();
+    }
     ensure_default_ledgers(&mut cfg);
     Ok(cfg)
 }
@@ -264,14 +349,19 @@ mod tests {
                 stability_api_key: None,
                 omniroute_base_url: Some("http://127.0.0.1:20128/v1".into()),
                 omniroute_api_key: None,
-                omniroute_image_model: Some("auto".into()),
-                omniroute_chat_model: None,
+                omniroute_image_model: Some("pollinations/flux".into()),
+                omniroute_chat_model: Some("auto/best-free".into()),
                 omniroute_prefer_free: Some(true),
+                needs_system_prompt: None,
+                allow_stub_fallback_on_image_error: Some(false),
                 connector_budget_updates: None,
             },
         )
         .unwrap();
         assert!(dto.xai_api_key_set);
+        assert!(!dto.needs_system_prompt.is_empty());
+        assert_eq!(dto.omniroute_chat_model, "claude-sonnet");
+        assert!(!dto.allow_stub_fallback_on_image_error);
         assert!(!dto.connector_budgets.is_empty());
         assert!(dto.omniroute_prefer_free);
         let stub = dto

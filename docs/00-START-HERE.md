@@ -37,8 +37,16 @@ Mapa histórico: [FOUNDATION_REVIEW.md](./FOUNDATION_REVIEW.md).
 | **Foundation 5** | **Hecha** — Plans draft/approve + Automatic Factory |
 | **Foundation 6** | **Hecha** — Coverage issues + Review 5 acciones |
 | Scaffold Tauri + 6 rutas | Sí (estaciones con UI real F1–F6) |
-| Negocio (Factory/Review/…) | **MVP local usable** (stub de generación; sin providers IA) |
+| Negocio (Factory/Review/…) | **MVP local usable** (stub + OmniRoute e2e; catálogo providers en docs) |
 | Tests | Vitest, Playwright (Vite), cargo test/fmt/check |
+| Quality gate | `pnpm quality` · [reglas-calidad-codigo.md](./reglas-calidad-codigo.md) · **D-040** |
+| **Handoff guiones** | [SCRIPT-FEEDER-HANDOFF.md](./SCRIPT-FEEDER-HANDOFF.md) — contrato para la app hermana que alimenta guiones |
+
+### Congelación de foco (handoff)
+
+VL queda **lista para consumir guiones** vía Manual Factory (paste de texto).  
+La **siguiente app** del roadmap de producto es el **alimentador de guiones** (idea → texto de lección).  
+Al retomar VL: providers de volumen (Fal/etc.), import de archivo, y bridge según el handoff.
 
 ---
 
@@ -52,3 +60,6 @@ Mapa histórico: [FOUNDATION_REVIEW.md](./FOUNDATION_REVIEW.md).
 | Jobs detallados | `06-JOBS.md` |
 | Plan por fases | `11-IMPLEMENTATION_PLAN.md` |
 | Non-goals largos | `13-NON_GOALS.md` |
+| Providers imagen (catálogo, benchmark, scoring) | [`providers/README.md`](./providers/README.md) · **D-039** |
+| Calidad de código (estilo + `pnpm quality`) | [`reglas-calidad-codigo.md`](./reglas-calidad-codigo.md) · **D-040** |
+| App de guiones → VL | [`SCRIPT-FEEDER-HANDOFF.md`](./SCRIPT-FEEDER-HANDOFF.md) |

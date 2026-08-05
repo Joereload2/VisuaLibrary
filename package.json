@@ -17,8 +17,15 @@
     "fmt:rust": "cargo fmt --all",
     "fmt:rust:check": "cargo fmt --all -- --check",
     "check:rust": "cargo check --workspace",
-    "quality:rust": "cargo fmt --all && cargo check --workspace && cargo test --workspace",
-    "quality": "pnpm fmt:rust:check && pnpm check:rust && pnpm test:rust && pnpm test:ui && pnpm build:ui"
+    "clippy": "cargo clippy --workspace --all-targets -- -W clippy::correctness",
+    "clippy:strict": "cargo clippy --workspace --all-targets -- -D warnings",
+    "check:ui": "pnpm --filter @visual-library/ui exec tsc --noEmit",
+    "quality:rust": "pnpm fmt:rust:check && pnpm clippy && pnpm test:rust",
+    "quality:ui": "pnpm check:ui && pnpm test:ui",
+    "quality": "pnpm fmt:rust:check && pnpm clippy && pnpm test:rust && pnpm quality:ui",
+    "quality:strict": "pnpm fmt:rust:check && pnpm clippy:strict && pnpm test:rust && pnpm quality:ui",
+    "quality:ps1": "pwsh -File scripts/check-quality.ps1",
+    "quality:ps1:strict": "pwsh -File scripts/check-quality.ps1 -Strict"
   },
   "engines": {
     "node": ">=20"

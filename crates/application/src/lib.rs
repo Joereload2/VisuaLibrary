@@ -14,8 +14,9 @@ pub mod ports;
 pub mod settings;
 
 pub use assets::{
-    approve_asset, edit_asset_metadata, get_asset_preview, list_library_assets, list_waiting_review,
-    mark_asset_duplicate, regenerate_asset, reject_asset, AssetDto, AssetPreviewDto,
+    approve_asset, edit_asset_metadata, get_asset_preview, list_library_assets,
+    list_waiting_review, mark_asset_duplicate, regenerate_asset, reject_asset, AssetDto,
+    AssetPreviewDto,
 };
 pub use catalog::{
     ensure_concept, ensure_representation, ensure_theme, list_concepts, list_representations,
@@ -24,22 +25,25 @@ pub use catalog::{
 pub use coverage::{get_coverage_report, CoverageIssue, CoverageReport, CoverageSummary};
 pub use error::AppError;
 pub use factory::{
-    list_image_providers, preview_manual_batch, propose_needs_from_script,
-    run_automatic_from_plan, select_image_provider, submit_manual_batch, AutomaticRunResult,
+    list_image_providers, preview_manual_batch, propose_needs_from_script, run_automatic_from_plan,
+    select_image_provider, submit_manual_batch, with_no_text_guard, AutomaticRunResult,
     ImageProvider, ManualBatchPreview, ManualNeed, ManualNeedResult, ProposeNeedsInput,
-    ProposeNeedsResult,
+    ProposeNeedsResult, NO_TEXT_IN_IMAGE_GUARD,
 };
 pub use integrations::{
-    generate_image_bytes, get_integration_config_dto, list_connector_budgets,
-    list_image_providers_with_config, list_script_ai_providers, load_integration_config,
-    propose_needs_with_config, record_usage, save_integration_config,
-    select_image_provider_with_config, update_connector_budget, update_integration_config,
-    ConnectorBudgetDto, ConnectorBudgetUpdate, ConnectorLedger, GeneratedImage, ImageProviderInfo,
-    IntegrationConfig, IntegrationConfigDto, IntegrationConfigUpdate, ScriptAiProviderInfo,
+    default_needs_system_prompt, generate_image_bytes, get_integration_config_dto,
+    list_connector_budgets, list_image_providers_with_config, list_omniroute_model_catalog,
+    list_script_ai_providers, load_integration_config, probe_omniroute, propose_needs_with_config,
+    record_usage, save_integration_config, score_image_provider, select_image_provider_with_config,
+    update_connector_budget, update_integration_config, ConnectorBudgetDto, ConnectorBudgetUpdate,
+    ConnectorLedger, GeneratedImage, ImageProviderInfo, IntegrationConfig, IntegrationConfigDto,
+    IntegrationConfigUpdate, OmniRouteModelCatalog, OmniRouteProbeResult, ProviderScoreWeights,
+    ScriptAiProviderInfo,
 };
 pub use jobs::{
-    colored_stub_bmp, generate_stub_asset, media_writer_for, resolve_under_media_root,
-    FsMediaWriter, GenerateStubInput, GenerateStubResult, JobDto, MediaWriter, STUB_PNG,
+    colored_stub_bmp, generate_stub_asset, media_writer_for, normalize_provider_id,
+    resolve_under_media_root, FsMediaWriter, GenerateStubInput, GenerateStubResult, JobDto,
+    MediaWriter, STUB_PNG,
 };
 pub use plans::{
     add_plan_item, approve_coverage_plan, create_plan, get_plan_with_items, list_plans, PlanDto,

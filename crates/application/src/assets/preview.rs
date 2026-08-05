@@ -26,12 +26,8 @@ pub fn get_asset_preview(
         .get(asset_id)?
         .ok_or_else(|| AppError::NotFound(format!("asset {asset_id}")))?;
     let full = resolve_under_media_root(media_root, &asset.storage_path)?;
-    let bytes = std::fs::read(&full).map_err(|e| {
-        AppError::Storage(format!(
-            "no se pudo leer {}: {e}",
-            full.display()
-        ))
-    })?;
+    let bytes = std::fs::read(&full)
+        .map_err(|e| AppError::Storage(format!("no se pudo leer {}: {e}", full.display())))?;
     let mime = asset
         .mime
         .clone()

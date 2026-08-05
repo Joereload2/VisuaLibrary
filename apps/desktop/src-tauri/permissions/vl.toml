@@ -34,6 +34,16 @@ description = "Allow updating integration/API provider config"
 commands.allow = ["update_integration_config_cmd"]
 
 [[permission]]
+identifier = "allow-probe-omniroute-cmd"
+description = "Allow probing OmniRoute gateway (models/images/chat)"
+commands.allow = ["probe_omniroute_cmd"]
+
+[[permission]]
+identifier = "allow-list-omniroute-models-cmd"
+description = "Allow listing OmniRoute chat/image models for Settings menus"
+commands.allow = ["list_omniroute_models_cmd"]
+
+[[permission]]
 identifier = "allow-list-script-ai-providers-cmd"
 description = "Allow listing script AI providers"
 commands.allow = ["list_script_ai_providers_cmd"]

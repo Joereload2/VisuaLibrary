@@ -3,7 +3,9 @@ use visual_library_domain::{decide_acquisition, field_matches, AcquisitionDecisi
 
 use crate::catalog::{ensure_concept, ensure_representation};
 use crate::error::AppError;
-use crate::factory::variants::{apply_matiz_to_prompt, clamp_variant_count, matiz_specs};
+use crate::factory::variants::{
+    apply_matiz_to_prompt, clamp_variant_count, matiz_specs, with_no_text_guard,
+};
 use crate::integrations::{select_image_provider_with_config, IntegrationConfig};
 use crate::jobs::{generate_stub_asset, GenerateStubInput, GenerateStubResult, MediaWriter};
 use crate::ports::assets::AssetStore;
@@ -61,6 +63,8 @@ pub struct ManualBatchPreview {
     pub found_count: usize,
     pub generate_count: usize,
     pub skipped_count: usize,
+    /// Assets already waiting review (blocked re-generate).
+    pub pending_review_count: usize,
     /// Total variant images planned/produced across needs.
     pub variant_images: usize,
 }
@@ -73,7 +77,13 @@ fn style(n: &ManualNeed) -> String {
     n.style.as_deref().unwrap_or("any").trim().to_string()
 }
 
-fn empty_result(index: usize, ckey: &str, rkey: &str, decision: &str, message: &str) -> ManualNeedResult {
+fn empty_result(
+    index: usize,
+    ckey: &str,
+    rkey: &str,
+    decision: &str,
+    message: &str,
+) -> ManualNeedResult {
     ManualNeedResult {
         index,
         decision: decision.into(),
@@ -144,25 +154,27 @@ fn resolve_need(
         field_matches(&o, a.orientation.as_deref()) && field_matches(&s, a.style.as_deref())
     });
 
-    // Waiting review: do not flood with more of the same need unless enriching.
-    if !sufficient {
-        if let Some(waiting) = find_waiting_match(assets, &rep.id, &o, &s)? {
-            return Ok(ManualNeedResult {
-                index,
-                decision: "pending_review".into(),
-                concept_id: concept.id,
-                concept_key: concept.key,
-                representation_id: rep.id,
-                representation_key: rep.key,
-                found_asset_id: Some(waiting.id.clone()),
-                generate: None,
-                generates: vec![],
-                variants_planned: 0,
-                matiz_labels: vec![],
-                message: format!("PENDING_REVIEW asset {} (no re-generate)", waiting.id),
-                selected_provider: None,
-            });
-        }
+    // Waiting review: do not flood with more of the same need.
+    if let Some(waiting) = find_waiting_match(assets, &rep.id, &o, &s)? {
+        // Even FOUND+enrich is blocked if variants already wait in Review.
+        return Ok(ManualNeedResult {
+            index,
+            decision: "pending_review".into(),
+            concept_id: concept.id,
+            concept_key: concept.key,
+            representation_id: rep.id,
+            representation_key: rep.key,
+            found_asset_id: Some(waiting.id.clone()),
+            generate: None,
+            generates: vec![],
+            variants_planned: 0,
+            matiz_labels: vec![],
+            message: format!(
+                "PENDING_REVIEW asset {} — ya hay variantes en cola (no re-generate)",
+                waiting.id
+            ),
+            selected_provider: None,
+        });
     }
 
     let labels: Vec<String> = matiz_specs(vcount)
@@ -274,6 +286,7 @@ pub fn preview_manual_batch(
     let mut found_count = 0usize;
     let mut generate_count = 0usize;
     let mut skipped_count = 0usize;
+    let mut pending_review_count = 0usize;
     let mut variant_images = 0usize;
 
     for (i, need) in needs.iter().enumerate() {
@@ -289,6 +302,7 @@ pub fn preview_manual_batch(
                 generate_count += 1;
                 variant_images += r.variants_planned;
             }
+            "pending_review" => pending_review_count += 1,
             _ => skipped_count += 1,
         }
         results.push(r);
@@ -299,6 +313,7 @@ pub fn preview_manual_batch(
         found_count,
         generate_count,
         skipped_count,
+        pending_review_count,
         variant_images,
     })
 }
@@ -333,17 +348,27 @@ pub fn submit_manual_batch(
         r.selected_provider = Some(provider.id.clone());
         let vcount = r.variants_planned.max(1);
         let specs = matiz_specs(vcount);
-        let base = need.prompt.clone().unwrap_or_else(|| {
+        let mut base = need.prompt.clone().unwrap_or_else(|| {
             format!(
                 "Educational illustration for concept {} / {}",
                 r.concept_key, r.representation_key
             )
         });
+        // Fold AI instructions into generation when present (so UI edits matter).
+        if let Some(ai) = need
+            .ai_instructions
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            base = format!("{base}\n\nSegment instructions:\n{ai}");
+        }
 
         let mut gens = Vec::with_capacity(specs.len());
         let mut labels = Vec::with_capacity(specs.len());
         for (vi, (label, suffix)) in specs.iter().enumerate() {
-            let prompt = apply_matiz_to_prompt(&base, suffix, vi + 1, specs.len());
+            let prompt =
+                with_no_text_guard(&apply_matiz_to_prompt(&base, suffix, vi + 1, specs.len()));
             let gen = generate_stub_asset(
                 catalog,
                 assets,
@@ -354,13 +379,29 @@ pub fn submit_manual_batch(
                     representation_id: r.representation_id.clone(),
                     prompt: Some(prompt),
                     provider: Some(provider.id.clone()),
+                    orientation: need.orientation.clone(),
+                    style: need.style.clone(),
                     idempotency_key: Some(format!(
                         "manual:{}:{}:{}:v{}",
-                        batch, r.concept_key, r.representation_key, vi + 1
+                        batch,
+                        r.concept_key,
+                        r.representation_key,
+                        vi + 1
                     )),
                 },
                 cfg,
-            )?;
+            )
+            .map_err(|e| {
+                AppError::Validation(format!(
+                    "Need #{} {}/{} variante {}/{} (provider `{}`): {e}",
+                    r.index + 1,
+                    r.concept_key,
+                    r.representation_key,
+                    vi + 1,
+                    specs.len(),
+                    provider.id
+                ))
+            })?;
             labels.push((*label).to_string());
             gens.push(gen);
         }
@@ -756,5 +797,70 @@ mod tests {
         let cfg = IntegrationConfig::default();
         let p = preview_manual_batch(&m, &m, &[need], &cfg).unwrap();
         assert_eq!(p.skipped_count, 1);
+    }
+
+    #[test]
+    fn pending_review_blocks_regenerate_and_enrich() {
+        let m = Mem::default();
+        let c = ensure_concept(&m, "tree", "Tree", None).unwrap();
+        let r = ensure_representation(&m, &c.id, "hero", "Hero", Some("landscape")).unwrap();
+        // Already waiting variants for this need.
+        m.assets.lock().unwrap().push(AssetDto {
+            id: "wait1".into(),
+            concept_id: c.id.clone(),
+            representation_id: r.id.clone(),
+            status: "waiting_review".into(),
+            storage_path: "w.bmp".into(),
+            content_hash: None,
+            width: None,
+            height: None,
+            mime: None,
+            format: None,
+            orientation: Some("landscape".into()),
+            style: Some("any".into()),
+            provider: Some("stub".into()),
+            prompt: None,
+            generation_request_id: None,
+            review_notes: None,
+            reject_reason: None,
+            duplicate_of_asset_id: None,
+            approved_at: None,
+            rejected_at: None,
+            created_at: "t".into(),
+            updated_at: "t".into(),
+        });
+        // Also an approved FOUND candidate — enrich must still be blocked.
+        m.assets.lock().unwrap().push(AssetDto {
+            id: "lib1".into(),
+            concept_id: c.id,
+            representation_id: r.id,
+            status: "approved".into(),
+            storage_path: "a.bmp".into(),
+            content_hash: None,
+            width: None,
+            height: None,
+            mime: None,
+            format: None,
+            orientation: Some("landscape".into()),
+            style: Some("any".into()),
+            provider: None,
+            prompt: None,
+            generation_request_id: None,
+            review_notes: None,
+            reject_reason: None,
+            duplicate_of_asset_id: None,
+            approved_at: Some("t".into()),
+            rejected_at: None,
+            created_at: "t".into(),
+            updated_at: "t".into(),
+        });
+        let mut need = sample_need("tree", "hero", 3);
+        need.orientation = Some("landscape".into());
+        need.also_generate_if_found = Some(true);
+        let cfg = IntegrationConfig::default();
+        let p = preview_manual_batch(&m, &m, &[need], &cfg).unwrap();
+        assert_eq!(p.pending_review_count, 1);
+        assert_eq!(p.generate_count, 0);
+        assert_eq!(p.results[0].decision, "pending_review");
     }
 }

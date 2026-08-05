@@ -26,8 +26,5 @@ pub fn bootstrap(app_data_root: PathBuf) -> Result<Platform, AppError> {
     // Durable jobs: recover work left in `running` after crash/kill.
     let _recovered = settings.recover_running_jobs()?;
 
-    Ok(Platform {
-        layout,
-        settings,
-    })
+    Ok(Platform { layout, settings })
 }

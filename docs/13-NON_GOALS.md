@@ -38,6 +38,9 @@ Si un cambio cae aquí, se rechaza o se agenda **explícitamente** como post-MVP
 | Ejecutar providers desde Plans | Plans = qué, no cómo |
 | Producción dentro de Settings | Settings = config |
 | Coverage solo como dashboard de charts | Debe ser accionable |
+| Catálogo de 40+ providers **en código/runtime** | Research en `docs/providers/`; runtime = Tier 0 (D-039) |
+| Tratar OmniRoute como “el modelo de imagen” | Es **gateway**; calidad = backend enrutado |
+| Provider SDK multi-vendor de un golpe | Un adapter por approve; stub + omniroute primero |
 
 ---
 

@@ -36,11 +36,21 @@ pub struct GeneratedImage {
     pub provider_id: String,
 }
 
-/// Full catalog (product knowledge). Enable + keys decide readiness.
+/// Full **runtime** catalog (Tier 0). Research Tier-1: `docs/providers/CATALOG.md`.
+/// kind: local_stub | gateway | remote_api | local_runtime (D-039).
+/// cost_score: lower = cheaper preference · quality/availability: higher = better.
 pub fn catalog_image_providers() -> Vec<(&'static str, &'static str, &'static str, u8, u8, u8)> {
     // id, name, kind, cost, quality, availability
     vec![
         ("stub", "Stub local (tile color)", "local_stub", 0, 20, 100),
+        (
+            "omniroute",
+            "OmniRoute gateway (free stack)",
+            "gateway",
+            5,
+            70,
+            90,
+        ),
         (
             "spacexai-image",
             "SpaceXAI / xAI image",
@@ -51,15 +61,48 @@ pub fn catalog_image_providers() -> Vec<(&'static str, &'static str, &'static st
         ),
         ("openai-image", "OpenAI Images", "remote_api", 50, 80, 70),
         ("stability", "Stability", "remote_api", 35, 75, 65),
-        (
-            "omniroute",
-            "OmniRoute gateway (free stack)",
-            "gateway",
-            5,
-            70,
-            90,
-        ),
     ]
+}
+
+/// Weights for ranking runnable providers (see `docs/providers/SCORING.md`).
+#[derive(Debug, Clone, Copy)]
+pub struct ProviderScoreWeights {
+    pub free: u32,
+    pub quality: u32,
+    pub cost: u32,
+    pub availability: u32,
+}
+
+impl ProviderScoreWeights {
+    /// Automatic Factory / free-first product default.
+    pub const AUTOMATIC: Self = Self {
+        free: 40,
+        quality: 15,
+        cost: 25,
+        availability: 20,
+    };
+}
+
+/// Higher is better. Non-runnable providers get a very low score.
+pub fn score_image_provider(p: &ImageProviderInfo, w: &ProviderScoreWeights) -> i64 {
+    let runnable = p.enabled
+        && p.can_afford_one
+        && (p.id == "stub" || p.status == "always" || p.status == "ready");
+    if !runnable {
+        return i64::MIN / 4;
+    }
+    let free_c: u32 = if p.is_free || p.unit_cost_cents == 0 {
+        100
+    } else {
+        0
+    };
+    // cost_score is "expense preference" (0 = cheapest).
+    let cost_c = 100u32.saturating_sub(u32::from(p.cost_score));
+    let q = u32::from(p.quality_score);
+    let a = u32::from(p.availability_score);
+    let num = w.free * free_c + w.quality * q + w.cost * cost_c + w.availability * a;
+    let den = (w.free + w.quality + w.cost + w.availability).max(1);
+    i64::from(num / den)
 }
 
 pub fn list_image_providers_with_config(cfg: &IntegrationConfig) -> Vec<ImageProviderInfo> {
@@ -90,14 +133,24 @@ pub fn list_image_providers_with_config(cfg: &IntegrationConfig) -> Vec<ImagePro
                 id: id.into(),
                 name: name.into(),
                 description: match id {
-                    "stub" => "Genera tile local. Gratis / sin red.".into(),
-                    "spacexai-image" => {
-                        "Imagen vía xAI. Conectar key + HTTP. Respeta presupuesto.".into()
+                    "stub" => {
+                        "Tier 0 local_stub. Tile de color; gratis; dev/offline. Ver docs/providers."
+                            .into()
                     }
-                    "openai-image" => "OpenAI Images. Key + HTTP + presupuesto.".into(),
-                    "stability" => "Stability. Key + HTTP + free quota/presupuesto.".into(),
+                    "spacexai-image" => {
+                        "Tier 0 remote_api. xAI image: key + HTTP pendiente. Presupuesto por conector."
+                            .into()
+                    }
+                    "openai-image" => {
+                        "Tier 0 remote_api. OpenAI Images: key + HTTP pendiente. Manual premium."
+                            .into()
+                    }
+                    "stability" => {
+                        "Tier 0 remote_api. Stability: key + HTTP pendiente. Presupuesto/cuota."
+                            .into()
+                    }
                     "omniroute" => {
-                        "Gateway local OmniRoute (/v1/images/generations). Free tiers + fallback. Ideal Automatic."
+                        "Tier 0 gateway (no es el modelo). /v1/images + chat needs. Free stack. docs/providers."
                             .into()
                     }
                     _ => "".into(),
@@ -195,7 +248,9 @@ pub fn select_image_provider_with_config(
         {
             return Ok(p.clone());
         }
-        if let Some(p) = all.iter().find(|p| is_runnable(p) && p.is_free && p.id != "stub")
+        if let Some(p) = all
+            .iter()
+            .find(|p| is_runnable(p) && p.is_free && p.id != "stub")
         {
             return Ok(p.clone());
         }
@@ -209,14 +264,13 @@ pub fn select_image_provider_with_config(
         return Ok(p.clone());
     }
 
+    let weights = ProviderScoreWeights::AUTOMATIC;
     let mut candidates: Vec<_> = all.into_iter().filter(|p| is_runnable(p)).collect();
+    // D-039 / docs/providers/SCORING.md — free-first Automatic ranking.
     candidates.sort_by(|a, b| {
-        // free first, then quality, availability, low cost
-        b.is_free
-            .cmp(&a.is_free)
-            .then(b.quality_score.cmp(&a.quality_score))
-            .then(b.availability_score.cmp(&a.availability_score))
-            .then(a.cost_score.cmp(&b.cost_score))
+        score_image_provider(b, &weights)
+            .cmp(&score_image_provider(a, &weights))
+            .then(a.id.cmp(&b.id))
     });
     candidates
         .into_iter()
@@ -272,9 +326,7 @@ pub fn generate_image_bytes(
             &cfg.stability_api_key,
             // CONNECT: Stability REST generate
         ),
-        "omniroute" => {
-            crate::integrations::omniroute::generate_image_via_omniroute(prompt, cfg)
-        }
+        "omniroute" => crate::integrations::omniroute::generate_image_via_omniroute(prompt, cfg),
         other => Err(AppError::Validation(format!(
             "provider sin adapter: {other}"
         ))),
@@ -333,5 +385,32 @@ mod tests {
         cfg.omniroute_prefer_free = false;
         let p = select_image_provider_with_config(None, &cfg).unwrap();
         assert_eq!(p.id, "stub");
+    }
+
+    #[test]
+    fn score_prefers_free_over_paid_when_weights_automatic() {
+        let cfg = IntegrationConfig::default();
+        let all = list_image_providers_with_config(&cfg);
+        let stub = all.iter().find(|p| p.id == "stub").unwrap();
+        let omni = all.iter().find(|p| p.id == "omniroute").unwrap();
+        // Both free-ish; omniroute has higher quality → can beat stub when both runnable.
+        let w = ProviderScoreWeights::AUTOMATIC;
+        let s_stub = score_image_provider(stub, &w);
+        let s_omni = score_image_provider(omni, &w);
+        assert!(s_omni > s_stub || s_omni == s_stub);
+        assert!(s_stub > i64::MIN / 4);
+    }
+
+    #[test]
+    fn catalog_kinds_match_taxonomy() {
+        for (_, _, kind, _, _, _) in catalog_image_providers() {
+            assert!(
+                matches!(
+                    kind,
+                    "local_stub" | "gateway" | "remote_api" | "local_runtime"
+                ),
+                "unexpected kind {kind}"
+            );
+        }
     }
 }

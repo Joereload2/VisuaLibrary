@@ -5,11 +5,13 @@ import {
   type PlanDto,
   type AutomaticRunResult,
 } from "../../shared/ipc/client";
+import { ConnectionBanner } from "./ConnectionBanner";
 
 export function AutomaticFactory() {
   const [plans, setPlans] = useState<PlanDto[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [result, setResult] = useState<AutomaticRunResult | null>(null);
+  const [resultTab, setResultTab] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,8 +44,12 @@ export function AutomaticFactory() {
     try {
       const r = await invokeRunAutomaticPlan(selectedId);
       setResult(r);
+      setResultTab(0);
+      const pending = r.batch.pending_review_count ?? 0;
       setMessage(
-        `Automatic run: FOUND ${r.batch.found_count} · GENERATE ${r.batch.generate_count}. Revisa Waiting Review.`,
+        `FOUND ${r.batch.found_count} · GENERATE ${r.batch.generate_count}` +
+          (pending ? ` · PENDING ${pending}` : "") +
+          `. Revisa Review.`,
       );
     } catch (err) {
       setError(String((err as { message?: string })?.message ?? err));
@@ -63,84 +69,89 @@ export function AutomaticFactory() {
     );
   }
 
+  const active = result?.batch.results[resultTab];
+
   return (
     <section className="station">
       <header>
         <h2>Automatic Factory</h2>
-        <p>
-          Solo planes <strong>approved</strong>. No genera al azar. Plans decide qué; aquí se
-          ejecuta.
-        </p>
+        <p>Solo planes approved. Plans decide qué; aquí se ejecuta. Sin scroll.</p>
       </header>
 
-      <div className="placeholder-card">
-        {plans.length === 0 ? (
-          <p>
-            Empty: no hay planes approved. Crea items y aprueba en <strong>Plans</strong>.
-          </p>
-        ) : (
-          <>
-            <label htmlFor="plan_sel">Plan approved</label>
-            <select
-              id="plan_sel"
-              value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
-              style={selectStyle}
-            >
-              {plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <div style={{ marginTop: 12 }}>
-              <button type="button" disabled={busy || !selectedId} style={btnStyle} onClick={() => void onRun()}>
-                Run Automatic Factory
-              </button>
-            </div>
-          </>
-        )}
-        {message ? (
-          <p className="health" style={{ color: "var(--accent)" }}>
-            {message}
-          </p>
-        ) : null}
-        {error ? (
-          <p className="health" style={{ color: "#f87171" }}>
-            {error}
-          </p>
-        ) : null}
-      </div>
+      <ConnectionBanner />
 
-      {result ? (
-        <div className="placeholder-card" style={{ marginTop: "1rem" }}>
-          <h3>Resultado</h3>
-          <ul>
-            {result.batch.results.map((r) => (
-              <li key={r.index}>
-                <strong>{r.decision}</strong> {r.concept_key}/{r.representation_key} — {r.message}
-              </li>
-            ))}
-          </ul>
+      <div className="station-body">
+        <div className="placeholder-card fill">
+          {plans.length === 0 ? (
+            <p>
+              Empty: no hay planes approved. Crea y aprueba en <strong>Plans</strong>.
+            </p>
+          ) : (
+            <>
+              <div className="tab-strip" style={{ marginBottom: 8 }}>
+                {plans.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`tab-btn${selectedId === p.id ? " active" : ""}`}
+                    onClick={() => setSelectedId(p.id)}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+              <div style={footerBar}>
+                <button
+                  type="button"
+                  disabled={busy || !selectedId}
+                  style={btnStyle}
+                  onClick={() => void onRun()}
+                >
+                  Run Automatic
+                </button>
+              </div>
+            </>
+          )}
+
+          {result && result.batch.results.length > 0 ? (
+            <>
+              <div className="tab-strip" style={{ marginTop: 12 }}>
+                {result.batch.results.map((r, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`tab-btn${resultTab === i ? " active" : ""}`}
+                    onClick={() => setResultTab(i)}
+                  >
+                    #{i + 1} {r.decision}
+                  </button>
+                ))}
+              </div>
+              {active ? (
+                <p style={{ margin: "0.5rem 0 0", fontSize: "0.88rem", color: "var(--text-muted)" }}>
+                  <strong style={{ color: "var(--text)" }}>{active.decision}</strong>{" "}
+                  {active.concept_key}/{active.representation_key} — {active.message}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+
+          {message ? <p className="health msg-ok">{message}</p> : null}
+          {error ? <p className="health msg-err">{error}</p> : null}
         </div>
-      ) : null}
+      </div>
     </section>
   );
 }
 
-const selectStyle: CSSProperties = {
-  display: "block",
-  marginTop: 6,
-  padding: "0.45rem 0.6rem",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "var(--bg)",
-  color: "var(--text)",
-  minWidth: "16rem",
+const footerBar: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexShrink: 0,
 };
 
 const btnStyle: CSSProperties = {
-  padding: "0.45rem 0.9rem",
+  padding: "0.4rem 0.8rem",
   borderRadius: 8,
   border: "1px solid var(--border)",
   background: "var(--accent-soft)",
