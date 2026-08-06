@@ -42,11 +42,17 @@ Mapa histórico: [FOUNDATION_REVIEW.md](./FOUNDATION_REVIEW.md).
 | Quality gate | `pnpm quality` · [reglas-calidad-codigo.md](./reglas-calidad-codigo.md) · **D-040** |
 | **Handoff guiones** | [SCRIPT-FEEDER-HANDOFF.md](./SCRIPT-FEEDER-HANDOFF.md) — contrato para la app hermana que alimenta guiones |
 
-### Congelación de foco (handoff)
+### Ecosistema (2026-08-06)
 
-VL queda **lista para consumir guiones** vía Manual Factory (paste de texto).  
-La **siguiente app** del roadmap de producto es el **alimentador de guiones** (idea → texto de lección).  
-Al retomar VL: providers de volumen (Fal/etc.), import de archivo, y bridge según el handoff.
+| App | Rol |
+|-----|-----|
+| YouToMagic | Análisis + export guion/package |
+| **VisuaLibrary** | Imágenes / Library |
+| FacelessCreator | Producción long (TTS + montaje) |
+| VigilCut | Shorts |
+
+Packages: `Documents/FacelessStudio/packages/` — ver `PACKAGE-PATH.md`.  
+Roadmap: `ROADMAP-ECOSISTEMA.md` · maestro en YTM `docs/17-ROADMAP-MAESTRO.md` + `18-ECOSISTEMA-APPS.md`.
 
 ---
 
@@ -63,3 +69,6 @@ Al retomar VL: providers de volumen (Fal/etc.), import de archivo, y bridge seg�
 | Providers imagen (catálogo, benchmark, scoring) | [`providers/README.md`](./providers/README.md) · **D-039** |
 | Calidad de código (estilo + `pnpm quality`) | [`reglas-calidad-codigo.md`](./reglas-calidad-codigo.md) · **D-040** |
 | App de guiones → VL | [`SCRIPT-FEEDER-HANDOFF.md`](./SCRIPT-FEEDER-HANDOFF.md) |
+| Pipeline YTM + VL (análisis) | [`PIPELINE-ANALISIS.md`](./PIPELINE-ANALISIS.md) |
+| Production Package (guion↔imagen↔TTS) | [`PRODUCTION-PACKAGE.md`](./PRODUCTION-PACKAGE.md) |
+| Roadmap ecosistema (qué falta) | [`ROADMAP-ECOSISTEMA.md`](./ROADMAP-ECOSISTEMA.md) · maestro en YouToMagic `docs/17-ROADMAP-MAESTRO.md` |

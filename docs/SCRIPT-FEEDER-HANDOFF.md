@@ -17,9 +17,22 @@ VL **no** escribe guiones. El feeder **no** genera ni curate la librería de im�
 
 ---
 
+## Mapa de apps (2026-08-06)
+
+| App | Rol |
+|-----|-----|
+| **YouToMagic** | Exporta guion approved + `package.yaml` a `Documents/FacelessStudio/packages/` |
+| **VisuaLibrary** | Importa guion/package → needs → Review → `media/images/` |
+| **FacelessCreator** | Importa package → TTS + montaje long |
+| **VigilCut** | Shorts |
+
+Ver también: `PACKAGE-PATH.md`, `PRODUCTION-PACKAGE.md`, maestro en YTM `docs/18-ECOSISTEMA-APPS.md`.
+
+---
+
 ## Contrato de entrada actual (v1)
 
-Hoy Manual Factory acepta **texto plano de guion** (paste en UI).
+Hoy Manual Factory acepta **texto plano de guion** (paste en UI). También puede usarse `script.md` del package exportado por YouToMagic.
 
 | Campo | Tipo | Reglas |
 |-------|------|--------|
