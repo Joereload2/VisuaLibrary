@@ -46,13 +46,14 @@ Mapa histórico: [FOUNDATION_REVIEW.md](./FOUNDATION_REVIEW.md).
 
 | App | Rol |
 |-----|-----|
-| YouToMagic | Análisis + export guion/package |
-| **VisuaLibrary** | Imágenes / Library |
-| FacelessCreator | Producción long (TTS + montaje) |
-| VigilCut | Shorts |
+| YouToMagic | Análisis + export guion/package + ficha/estilo imagen |
+| **VisuaLibrary (esta app)** | Needs, generate, Review, Library (no monta vídeo) |
+| FacelessCreator | Producción long (import package, TTS, FFmpeg) |
+| VigilCut | Shorts / post vertical (no es esta Library) |
 
 Packages: `Documents/FacelessStudio/packages/` — ver `PACKAGE-PATH.md`.  
-Roadmap: `ROADMAP-ECOSISTEMA.md` · maestro en YTM `docs/17-ROADMAP-MAESTRO.md` + `18-ECOSISTEMA-APPS.md`.
+Entrada de guion hoy: **paste** de `script.md` o texto del package (import UI package = siguiente).  
+**No confundir** con la “biblioteca visual” interna de VigilCut (clips/shorts); VisuaLibrary es el catálogo concept-centric de assets didácticos.
 
 ---
 
