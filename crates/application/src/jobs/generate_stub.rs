@@ -88,6 +88,15 @@ pub struct GenerateStubInput {
     pub orientation: Option<String>,
     pub style: Option<String>,
     pub idempotency_key: Option<String>,
+    /// FacelessStudio package handoff (optional).
+    #[serde(default)]
+    pub package_id: Option<String>,
+    #[serde(default)]
+    pub package_path: Option<String>,
+    #[serde(default)]
+    pub beat_id: Option<String>,
+    #[serde(default)]
+    pub package_concept_key: Option<String>,
 }
 
 /// Normalize persisted provider ids (never store synthetic fallback labels as catalog ids).
@@ -164,7 +173,7 @@ pub fn generate_stub_asset(
                     "job en curso para clave de idempotencia {key}"
                 )));
             } else {
-                // Terminal non-waiting job still holds the unique key — retry suffix.
+                // Terminal non-waiting job still holds the unique key â€” retry suffix.
                 idempotency_key = Some(format!("{key}:retry:{}", now()));
             }
         }
@@ -211,7 +220,7 @@ pub fn generate_stub_asset(
             let mut g = generate_image_bytes("stub", &prompt_text, &asset_id, cfg)?;
             g.provider_id = "stub".into();
             let note = format!(
-                "FALLBACK stub: provider `{provider_id}` falló ({e}). \
+                "FALLBACK stub: provider `{provider_id}` fallÃ³ ({e}). \
                      No es imagen real del provider pedido."
             );
             (g, "stub".into(), Some(note))
@@ -219,9 +228,9 @@ pub fn generate_stub_asset(
         Err(e) if provider_id != "stub" => {
             return Err(AppError::Validation(format!(
                     "No se pudo generar con `{provider_id}`: {e}\n\n\
-                     Qué hacer: arranca OmniRoute / revisa model y base URL (Settings → Keys → Probar e2e), \
+                     QuÃ© hacer: arranca OmniRoute / revisa model y base URL (Settings â†’ Keys â†’ Probar e2e), \
                      o elige provider `stub` en la need solo para probar el flujo.\n\
-                     (No se sustituye en silencio por un tile local — evita confusiones en Review.)"
+                     (No se sustituye en silencio por un tile local â€” evita confusiones en Review.)"
                 )));
         }
         Err(e) => return Err(e),
@@ -296,6 +305,10 @@ pub fn generate_stub_asset(
         rejected_at: None,
         created_at: ts.clone(),
         updated_at: ts.clone(),
+        package_id: input.package_id.clone(),
+        package_path: input.package_path.clone(),
+        beat_id: input.beat_id.clone(),
+        package_concept_key: input.package_concept_key.clone(),
     };
     assets.insert(&asset)?;
 
@@ -677,6 +690,10 @@ mod tests {
                 orientation: None,
                 style: None,
                 idempotency_key: Some("idem-1".into()),
+                package_id: None,
+                package_path: None,
+                beat_id: None,
+                package_concept_key: None,
             },
             &mut cfg,
         )
@@ -700,6 +717,10 @@ mod tests {
                 orientation: None,
                 style: None,
                 idempotency_key: Some("idem-1".into()),
+                package_id: None,
+                package_path: None,
+                beat_id: None,
+                package_concept_key: None,
             },
             &mut cfg,
         )
@@ -741,6 +762,10 @@ mod tests {
                 orientation: None,
                 style: None,
                 idempotency_key: Some("idem-1".into()),
+                package_id: None,
+                package_path: None,
+                beat_id: None,
+                package_concept_key: None,
             },
             &mut cfg,
         )
@@ -765,6 +790,10 @@ mod tests {
                 orientation: None,
                 style: None,
                 idempotency_key: Some("idem-1".into()),
+                package_id: None,
+                package_path: None,
+                beat_id: None,
+                package_concept_key: None,
             },
             &mut cfg,
         )

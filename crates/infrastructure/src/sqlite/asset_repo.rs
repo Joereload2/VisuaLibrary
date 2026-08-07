@@ -29,12 +29,17 @@ fn map_asset(row: &rusqlite::Row<'_>) -> rusqlite::Result<AssetDto> {
         rejected_at: row.get(19)?,
         created_at: row.get(20)?,
         updated_at: row.get(21)?,
+        package_id: row.get(22)?,
+        package_path: row.get(23)?,
+        beat_id: row.get(24)?,
+        package_concept_key: row.get(25)?,
     })
 }
 
 const SELECT_COLS: &str = "id, concept_id, representation_id, status, storage_path, content_hash,
     width, height, mime, format, orientation, style, provider, prompt, generation_request_id,
-    review_notes, reject_reason, duplicate_of_asset_id, approved_at, rejected_at, created_at, updated_at";
+    review_notes, reject_reason, duplicate_of_asset_id, approved_at, rejected_at, created_at, updated_at,
+    package_id, package_path, beat_id, package_concept_key";
 
 impl AssetStore for SqliteSettingsStore {
     fn insert(&self, asset: &AssetDto) -> Result<(), AppError> {
@@ -44,9 +49,11 @@ impl AssetStore for SqliteSettingsStore {
                     id, concept_id, representation_id, status, storage_path, content_hash,
                     width, height, mime, format, orientation, style, provider, prompt,
                     generation_request_id, review_notes, reject_reason, duplicate_of_asset_id,
-                    approved_at, rejected_at, created_at, updated_at
+                    approved_at, rejected_at, created_at, updated_at,
+                    package_id, package_path, beat_id, package_concept_key
                 ) VALUES (
-                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22
+                    ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
+                    ?23, ?24, ?25, ?26
                 )",
                 rusqlite::params![
                     asset.id,
@@ -71,6 +78,10 @@ impl AssetStore for SqliteSettingsStore {
                     asset.rejected_at,
                     asset.created_at,
                     asset.updated_at,
+                    asset.package_id,
+                    asset.package_path,
+                    asset.beat_id,
+                    asset.package_concept_key,
                 ],
             )
             .map_err(|e| AppError::Storage(e.to_string()))?;

@@ -1,0 +1,13 @@
+node_modules/
+pnpm-store/
+target/
+dist/
+packages/ui/dist/
+packages/ui/test-results/
+*.pdb
+.venv/
+__pycache__/
+.env
+.env.*
+*.sqlite3
+*.db

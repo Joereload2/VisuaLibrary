@@ -9,14 +9,15 @@ pub mod error;
 pub mod factory;
 pub mod integrations;
 pub mod jobs;
+pub mod package;
 pub mod plans;
 pub mod ports;
 pub mod settings;
 
 pub use assets::{
-    approve_asset, edit_asset_metadata, get_asset_preview, list_library_assets,
-    list_waiting_review, mark_asset_duplicate, regenerate_asset, reject_asset, AssetDto,
-    AssetPreviewDto,
+    approve_asset, approve_asset_with_writeback, edit_asset_metadata, get_asset_preview,
+    list_library_assets, list_waiting_review, mark_asset_duplicate, regenerate_asset, reject_asset,
+    ApproveAssetResult, AssetDto, AssetPreviewDto,
 };
 pub use catalog::{
     ensure_concept, ensure_representation, ensure_theme, list_concepts, list_representations,
@@ -48,6 +49,12 @@ pub use jobs::{
 pub use plans::{
     add_plan_item, approve_coverage_plan, create_plan, get_plan_with_items, list_plans, PlanDto,
     PlanItemDto, PlanWithItemsDto,
+};
+pub use package::{
+    default_packages_root, list_packages, load_package_detail, load_package_summary,
+    propose_needs_from_package, validate_package_shape, write_package_images,
+    writeback_asset_to_package, PackageBeat, PackageDetail, PackageSummary, WritePackageImageItem,
+    WritePackageImagesResult,
 };
 pub use settings::{
     get_settings, update_media_root, validate_media_root, AppPathsDto, SettingsDto,

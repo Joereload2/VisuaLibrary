@@ -135,6 +135,17 @@ export type AssetDto = {
   rejected_at?: string | null;
   reject_reason?: string | null;
   created_at: string;
+  /** FacelessStudio package handoff (auto write-back on approve). */
+  package_id?: string | null;
+  package_path?: string | null;
+  beat_id?: string | null;
+  package_concept_key?: string | null;
+};
+
+export type ApproveAssetResult = {
+  asset: AssetDto;
+  package_writeback?: WritePackageImagesResult | null;
+  package_writeback_error?: string | null;
 };
 
 export type CoverageSummary = {
@@ -287,8 +298,8 @@ export async function invokeListLibraryAssets(): Promise<AssetDto[]> {
   return invokeRequired<AssetDto[]>("list_library_assets_cmd");
 }
 
-export async function invokeApproveAsset(assetId: string): Promise<AssetDto> {
-  return invokeRequired<AssetDto>("approve_asset_cmd", {
+export async function invokeApproveAsset(assetId: string): Promise<ApproveAssetResult> {
+  return invokeRequired<ApproveAssetResult>("approve_asset_cmd", {
     args: { asset_id: assetId },
   });
 }
@@ -319,6 +330,51 @@ export type ManualNeed = {
   variant_count?: number | null;
   /** If FOUND in Library, still generate variants (asked at that moment). */
   also_generate_if_found?: boolean | null;
+  /** Production package handoff (FacelessStudio). */
+  package_id?: string | null;
+  beat_id?: string | null;
+  package_path?: string | null;
+};
+
+export type PackageSummary = {
+  package_id: string;
+  title: string;
+  path: string;
+  package_dir: string;
+  beats: number;
+  script_status: string;
+  meta_status: string;
+  smoke: boolean;
+};
+
+export type PackageDetail = {
+  summary: PackageSummary;
+  script_text: string;
+  full_text: string;
+  beats: Array<{
+    beat_id: string;
+    role: string;
+    spoken_text: string;
+    visual_intent: string;
+    concept_key: string;
+    representation_key: string;
+    est_duration_sec: number;
+  }>;
+};
+
+export type WritePackageImageItem = {
+  beat_id: string;
+  source_path: string;
+  asset_id?: string | null;
+  concept_key?: string | null;
+};
+
+export type WritePackageImagesResult = {
+  package_id: string;
+  package_path: string;
+  written: Array<{ beat_id: string; dest_relative: string; asset_id?: string | null }>;
+  image_count: number;
+  notes: string;
 };
 
 export type ManualNeedResult = {
@@ -383,6 +439,36 @@ export async function invokeProposeNeedsFromScript(
       max_needs: maxNeeds ?? null,
       extra_instructions: extraInstructions?.trim() ? extraInstructions.trim() : null,
     },
+  });
+}
+
+export async function invokeListPackages(packagesRoot?: string): Promise<PackageSummary[]> {
+  return invokeRequired<PackageSummary[]>("list_packages_cmd", {
+    args: packagesRoot ? { packages_root: packagesRoot } : {},
+  });
+}
+
+export async function invokeLoadPackageDetail(packagePath: string): Promise<PackageDetail> {
+  return invokeRequired<PackageDetail>("load_package_detail_cmd", {
+    args: { package_path: packagePath, max_needs: null },
+  });
+}
+
+export async function invokeProposeNeedsFromPackage(
+  packagePath: string,
+  maxNeeds?: number,
+): Promise<ProposeNeedsResult> {
+  return invokeRequired<ProposeNeedsResult>("propose_needs_from_package_cmd", {
+    args: { package_path: packagePath, max_needs: maxNeeds ?? null },
+  });
+}
+
+export async function invokeWritePackageImages(
+  packagePath: string,
+  items: WritePackageImageItem[],
+): Promise<WritePackageImagesResult> {
+  return invokeRequired<WritePackageImagesResult>("write_package_images_cmd", {
+    args: { package_path: packagePath, items },
   });
 }
 

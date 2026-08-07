@@ -2,12 +2,16 @@ import { type CSSProperties, useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import {
   invokeListImageProviders,
+  invokeListPackages,
+  invokeProposeNeedsFromPackage,
   invokePreviewManualBatch,
   invokeProposeNeedsFromScript,
   invokeSubmitManualBatch,
+  invokeWritePackageImages,
   type ImageProvider,
   type ManualBatchPreview,
   type ManualNeed,
+  type PackageSummary,
 } from "../../shared/ipc/client";
 import { AutomaticFactory } from "./AutomaticFactory";
 import { ConnectionBanner } from "./ConnectionBanner";
@@ -39,11 +43,20 @@ function ManualFactory() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [packages, setPackages] = useState<PackageSummary[]>([]);
+  const [selectedPackagePath, setSelectedPackagePath] = useState("");
+  const [activePackagePath, setActivePackagePath] = useState<string | null>(null);
 
   useEffect(() => {
     void invokeListImageProviders()
       .then(setProviders)
       .catch(() => setProviders([]));
+    void invokeListPackages()
+      .then((list) => {
+        setPackages(list);
+        if (list[0] && !selectedPackagePath) setSelectedPackagePath(list[0].path);
+      })
+      .catch(() => setPackages([]));
   }, []);
 
   useEffect(() => {
@@ -88,6 +101,89 @@ function ManualFactory() {
       } else {
         setMessage(`Needs (heurística): ${r.needs.length}. Revisa y edita.`);
       }
+    } catch (err) {
+      setError(String((err as { message?: string })?.message ?? err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onOpenPackage() {
+    if (busy || !selectedPackagePath) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const r = await invokeProposeNeedsFromPackage(selectedPackagePath);
+      setNeeds(r.needs);
+      setScriptInstructions(r.script_instructions);
+      setProposeNotes(`${r.method}: ${r.notes}`);
+      setScript(
+        r.needs
+          .map((n) => n.script_excerpt || "")
+          .filter(Boolean)
+          .join("\n\n") || script,
+      );
+      setActivePackagePath(selectedPackagePath);
+      setPreview(null);
+      setNeedTab(0);
+      setStep("needs");
+      setMessage(
+        `Package abierto: ${r.needs.length} needs (beats). Revisa, genera y usa «Escribir al package».`,
+      );
+    } catch (err) {
+      setError(String((err as { message?: string })?.message ?? err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onWriteToPackage() {
+    if (busy) return;
+    const pkgPath =
+      activePackagePath ||
+      needs.find((n) => n.package_path)?.package_path ||
+      selectedPackagePath;
+    if (!pkgPath) {
+      setError("No hay package activo. Usa «Abrir package» primero.");
+      return;
+    }
+    if (!preview?.results?.length) {
+      setError("Primero Preview o Submit para tener assets generados.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const included = includedNeeds();
+      const items = preview.results
+        .map((res) => {
+          const need = included[res.index];
+          const beatId = need?.beat_id || `b${String(res.index + 1).padStart(2, "0")}`;
+          const gen =
+            res.generate ||
+            (res.generates && res.generates[0]) ||
+            null;
+          const found = res.found_asset_id;
+          const storage = gen?.storage_path;
+          if (!storage && !found) return null;
+          return {
+            beat_id: beatId,
+            source_path: storage || "",
+            asset_id: gen?.asset_id || found || null,
+            concept_key: need?.concept_key || res.concept_key || null,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => Boolean(x && x.source_path));
+      if (!items.length) {
+        throw new Error(
+          "No hay storage_path de imágenes generadas. Ejecuta Submit (no solo FOUND) o genera variantes.",
+        );
+      }
+      const result = await invokeWritePackageImages(pkgPath, items);
+      setMessage(
+        `Escrito al package: ${result.image_count} imagen(es). ${result.notes}\n${result.package_path}`,
+      );
     } catch (err) {
       setError(String((err as { message?: string })?.message ?? err));
     } finally {
@@ -220,12 +316,63 @@ function ManualFactory() {
       <header>
         <h2>Manual Factory</h2>
         <p>
-          Guion → needs → variantes → Review. La app comprueba OmniRoute sola y avisa si no hay
-          imagen real.
+          Guion → needs → variantes → Review. También: abrir package FacelessStudio (YouToMagic)
+          y escribir imágenes approved a media/images.
         </p>
       </header>
 
       <ConnectionBanner />
+
+      <div
+        style={{
+          flexShrink: 0,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          alignItems: "center",
+          marginBottom: 10,
+          padding: "0.5rem 0.65rem",
+          borderRadius: 10,
+          border: "1px solid var(--border)",
+          background: "var(--panel-2, var(--panel))",
+        }}
+      >
+        <label style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>Package</label>
+        <select
+          value={selectedPackagePath}
+          onChange={(e) => setSelectedPackagePath(e.target.value)}
+          disabled={busy}
+          style={{ ...inputStyle, minWidth: 220, maxWidth: 420, flex: 1 }}
+        >
+          <option value="">— FacelessStudio packages —</option>
+          {packages.map((p) => (
+            <option key={p.path} value={p.path}>
+              {p.smoke ? "SMOKE · " : ""}
+              {p.title || p.package_id} ({p.beats} beats · {p.script_status})
+            </option>
+          ))}
+        </select>
+        <button type="button" disabled={busy || !selectedPackagePath} style={btnStyle} onClick={() => void onOpenPackage()}>
+          Abrir package
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          style={btnStyle}
+          onClick={() => {
+            void invokeListPackages()
+              .then(setPackages)
+              .catch(() => setPackages([]));
+          }}
+        >
+          Actualizar lista
+        </button>
+        {activePackagePath ? (
+          <span style={{ fontSize: "0.75rem", color: "var(--accent)" }}>
+            Activo: {activePackagePath.split(/[/\\]/).slice(-2).join("/")}
+          </span>
+        ) : null}
+      </div>
 
       {busy ? (
         <div
@@ -543,6 +690,15 @@ function ManualFactory() {
                     onClick={() => void onSubmit()}
                   >
                     Submit
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || !(activePackagePath || selectedPackagePath)}
+                    style={{ ...btnStyle, borderColor: "var(--accent)" }}
+                    onClick={() => void onWriteToPackage()}
+                    title="Copia storage_path de resultados a package media/images/{beat_id}"
+                  >
+                    Escribir al package
                   </button>
                 </div>
               </>

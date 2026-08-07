@@ -1,12 +1,25 @@
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
 use visual_library_domain::{approve, mark_duplicate, reject, supersede, AssetStatus};
 
 use crate::assets::AssetDto;
 use crate::error::AppError;
 use crate::integrations::IntegrationConfig;
 use crate::jobs::{generate_stub_asset, GenerateStubInput, GenerateStubResult, MediaWriter};
+use crate::package::{writeback_asset_to_package, WritePackageImagesResult};
 use crate::ports::assets::AssetStore;
 use crate::ports::catalog::CatalogStore;
 use crate::ports::jobs::JobStore;
+
+/// Result of approving an asset, with optional package write-back.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApproveAssetResult {
+    pub asset: AssetDto,
+    pub package_writeback: Option<WritePackageImagesResult>,
+    /// Soft failure note (approve succeeded; package write failed).
+    pub package_writeback_error: Option<String>,
+}
 
 fn now() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -38,6 +51,28 @@ pub fn approve_asset(store: &impl AssetStore, asset_id: &str) -> Result<AssetDto
     store
         .get(asset_id)?
         .ok_or_else(|| AppError::Internal("asset desapareció tras approve".into()))
+}
+
+/// Approve and, if the asset is linked to a production package, write image to package.
+/// Package write-back errors are soft: the asset stays approved and the error is returned.
+pub fn approve_asset_with_writeback(
+    store: &impl AssetStore,
+    asset_id: &str,
+    media_root: &Path,
+) -> Result<ApproveAssetResult, AppError> {
+    let asset = approve_asset(store, asset_id)?;
+    match writeback_asset_to_package(&asset, media_root) {
+        Ok(package_writeback) => Ok(ApproveAssetResult {
+            asset,
+            package_writeback,
+            package_writeback_error: None,
+        }),
+        Err(e) => Ok(ApproveAssetResult {
+            asset,
+            package_writeback: None,
+            package_writeback_error: Some(e.to_string()),
+        }),
+    }
 }
 
 pub fn reject_asset(
@@ -154,6 +189,10 @@ pub fn regenerate_asset(
             orientation: asset.orientation.clone(),
             style: asset.style.clone(),
             idempotency_key: Some(format!("regen:{asset_id}:{}", now())),
+            package_id: asset.package_id.clone(),
+            package_path: asset.package_path.clone(),
+            beat_id: asset.beat_id.clone(),
+            package_concept_key: asset.package_concept_key.clone(),
         },
         cfg,
     )?;
@@ -297,6 +336,10 @@ mod tests {
             rejected_at: None,
             created_at: "t0".into(),
             updated_at: "t0".into(),
+            package_id: None,
+            package_path: None,
+            beat_id: None,
+            package_concept_key: None,
         }
     }
 

@@ -9,6 +9,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0002_domain_tables",
         include_str!("../../migrations/0002_domain_tables.sql"),
     ),
+    (
+        "0003_asset_package_handoff",
+        include_str!("../../migrations/0003_asset_package_handoff.sql"),
+    ),
 ];
 
 pub fn migrate(conn: &Connection) -> Result<(), InfraError> {

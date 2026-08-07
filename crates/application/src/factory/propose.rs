@@ -79,6 +79,9 @@ pub fn propose_needs_from_script(input: ProposeNeedsInput) -> Result<ProposeNeed
             included: Some(true),
             variant_count: Some(3),
             also_generate_if_found: Some(false),
+            package_id: None,
+            beat_id: None,
+            package_path: None,
         });
     }
 
@@ -106,7 +109,7 @@ fn build_script_instructions(script: &str, need_count: usize) -> String {
     )
 }
 
-fn split_script_chunks(script: &str, max: usize) -> Vec<String> {
+pub fn split_script_chunks(script: &str, max: usize) -> Vec<String> {
     let mut parts: Vec<String> = script
         .split("\n\n")
         .map(str::trim)

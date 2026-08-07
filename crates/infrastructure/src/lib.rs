@@ -1,6 +1,6 @@
 //! Infrastructure adapters.
 //!
-//! F1: SQLite/settings · F2: catalog · F3: assets/jobs generate stub.
+//! F1: SQLite/settings Â· F2: catalog Â· F3: assets/jobs generate stub.
 
 pub mod bootstrap;
 pub mod error;
@@ -138,6 +138,10 @@ mod tests {
                 orientation: None,
                 style: None,
                 idempotency_key: Some("k1".into()),
+                package_id: None,
+                package_path: None,
+                beat_id: None,
+                package_concept_key: None,
             },
             &mut visual_library_application::IntegrationConfig::default(),
         )
@@ -167,6 +171,10 @@ mod tests {
                 orientation: None,
                 style: None,
                 idempotency_key: Some("k2".into()),
+                package_id: None,
+                package_path: None,
+                beat_id: None,
+                package_concept_key: None,
             },
             &mut visual_library_application::IntegrationConfig::default(),
         )

@@ -342,6 +342,10 @@ mod tests {
             rejected_at: None,
             created_at: "t".into(),
             updated_at: "t".into(),
+            package_id: None,
+            package_path: None,
+            beat_id: None,
+            package_concept_key: None,
         });
         let r = get_coverage_report(&m, &m, &m).unwrap();
         assert!(r.summary.concepts_under_covered >= 1);

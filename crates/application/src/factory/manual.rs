@@ -36,6 +36,13 @@ pub struct ManualNeed {
     pub variant_count: Option<u8>,
     /// If Library FOUND: also generate variants to enrich channel (asked at that moment).
     pub also_generate_if_found: Option<bool>,
+    /// Production package handoff (optional).
+    #[serde(default)]
+    pub package_id: Option<String>,
+    #[serde(default)]
+    pub beat_id: Option<String>,
+    #[serde(default)]
+    pub package_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,6 +395,10 @@ pub fn submit_manual_batch(
                         r.representation_key,
                         vi + 1
                     )),
+                    package_id: need.package_id.clone(),
+                    package_path: need.package_path.clone(),
+                    beat_id: need.beat_id.clone(),
+                    package_concept_key: Some(need.concept_key.clone()),
                 },
                 cfg,
             )
@@ -666,6 +677,9 @@ mod tests {
             included: Some(true),
             variant_count: Some(variants),
             also_generate_if_found: Some(false),
+            package_id: None,
+            beat_id: None,
+            package_path: None,
         }
     }
 
@@ -738,6 +752,10 @@ mod tests {
             rejected_at: None,
             created_at: "t".into(),
             updated_at: "t".into(),
+            package_id: None,
+            package_path: None,
+            beat_id: None,
+            package_concept_key: None,
         });
         let mut need = sample_need("tree", "hero", 3);
         need.orientation = Some("landscape".into());
@@ -777,6 +795,10 @@ mod tests {
             rejected_at: None,
             created_at: "t".into(),
             updated_at: "t".into(),
+            package_id: None,
+            package_path: None,
+            beat_id: None,
+            package_concept_key: None,
         });
         let mut need = sample_need("tree", "hero", 2);
         need.orientation = Some("landscape".into());
@@ -828,6 +850,10 @@ mod tests {
             rejected_at: None,
             created_at: "t".into(),
             updated_at: "t".into(),
+            package_id: None,
+            package_path: None,
+            beat_id: None,
+            package_concept_key: None,
         });
         // Also an approved FOUND candidate — enrich must still be blocked.
         m.assets.lock().unwrap().push(AssetDto {
@@ -853,6 +879,10 @@ mod tests {
             rejected_at: None,
             created_at: "t".into(),
             updated_at: "t".into(),
+            package_id: None,
+            package_path: None,
+            beat_id: None,
+            package_concept_key: None,
         });
         let mut need = sample_need("tree", "hero", 3);
         need.orientation = Some("landscape".into());

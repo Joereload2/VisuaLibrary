@@ -80,6 +80,9 @@ pub fn run_automatic_from_plan(
             included: Some(true),
             variant_count: Some(1),
             also_generate_if_found: Some(false),
+            package_id: None,
+            beat_id: None,
+            package_path: None,
         });
     }
 

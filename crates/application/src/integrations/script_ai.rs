@@ -249,6 +249,9 @@ fn try_parse_needs_json(
                 included: Some(true),
                 variant_count: Some(n.variant_count.unwrap_or(3).clamp(1, 3)),
                 also_generate_if_found: Some(false),
+                package_id: None,
+                beat_id: None,
+                package_path: None,
             }
         })
         .collect();

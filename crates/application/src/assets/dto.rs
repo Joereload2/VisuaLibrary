@@ -24,4 +24,13 @@ pub struct AssetDto {
     pub rejected_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// FacelessStudio package handoff (optional; set when generated from package needs).
+    #[serde(default)]
+    pub package_id: Option<String>,
+    #[serde(default)]
+    pub package_path: Option<String>,
+    #[serde(default)]
+    pub beat_id: Option<String>,
+    #[serde(default)]
+    pub package_concept_key: Option<String>,
 }

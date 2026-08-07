@@ -6,20 +6,23 @@ use std::sync::Arc;
 use serde::Deserialize;
 use tauri::{Manager, State};
 use visual_library_application::{
-    add_plan_item, approve_asset, approve_coverage_plan, create_plan, edit_asset_metadata,
-    ensure_concept, ensure_representation, ensure_theme, generate_stub_asset, get_asset_preview,
-    get_coverage_report, get_integration_config_dto, get_plan_with_items,
+    add_plan_item, approve_asset_with_writeback, approve_coverage_plan, create_plan,
+    edit_asset_metadata, ensure_concept, ensure_representation, ensure_theme, generate_stub_asset,
+    get_asset_preview, get_coverage_report, get_integration_config_dto, get_plan_with_items,
     get_settings as load_settings, list_concepts, list_image_providers_with_config,
-    list_library_assets, list_omniroute_model_catalog, list_plans, list_representations,
-    list_script_ai_providers, list_themes, list_waiting_review, load_integration_config,
-    mark_asset_duplicate, media_writer_for, preview_manual_batch, probe_omniroute,
-    propose_needs_with_config, regenerate_asset, reject_asset, run_automatic_from_plan,
-    save_integration_config, submit_manual_batch, update_integration_config, update_media_root,
-    validate_media_root, AppPathsDto, AssetDto, AssetPreviewDto, AutomaticRunResult, ConceptDto,
-    CoverageReport, GenerateStubInput, GenerateStubResult, ImageProviderInfo, IntegrationConfigDto,
-    IntegrationConfigUpdate, ManualBatchPreview, ManualNeed, OmniRouteModelCatalog,
-    OmniRouteProbeResult, PlanDto, PlanItemDto, PlanWithItemsDto, ProposeNeedsResult,
-    RepresentationDto, ScriptAiProviderInfo, SettingsDto, ThemeDto, PRODUCT_NAME,
+    list_library_assets, list_omniroute_model_catalog, list_packages, list_plans,
+    list_representations, list_script_ai_providers, list_themes, list_waiting_review,
+    load_integration_config, load_package_detail, mark_asset_duplicate, media_writer_for,
+    preview_manual_batch, probe_omniroute, propose_needs_from_package, propose_needs_with_config,
+    regenerate_asset, reject_asset, run_automatic_from_plan, save_integration_config,
+    submit_manual_batch, update_integration_config, update_media_root, validate_media_root,
+    write_package_images, AppPathsDto, ApproveAssetResult, AssetDto, AssetPreviewDto,
+    AutomaticRunResult, ConceptDto, CoverageReport, GenerateStubInput, GenerateStubResult,
+    ImageProviderInfo, IntegrationConfigDto, IntegrationConfigUpdate, ManualBatchPreview,
+    ManualNeed, OmniRouteModelCatalog, OmniRouteProbeResult, PackageDetail, PackageSummary,
+    PlanDto, PlanItemDto, PlanWithItemsDto, ProposeNeedsResult, RepresentationDto,
+    ScriptAiProviderInfo, SettingsDto, ThemeDto, WritePackageImageItem, WritePackageImagesResult,
+    PRODUCT_NAME,
 };
 use visual_library_infrastructure::{bootstrap, infrastructure_health, Platform};
 
@@ -206,6 +209,10 @@ fn generate_stub_asset_cmd(
             orientation: None,
             style: None,
             idempotency_key: args.idempotency_key,
+            package_id: None,
+            package_path: None,
+            beat_id: None,
+            package_concept_key: None,
         },
         &mut cfg,
     )
@@ -233,8 +240,9 @@ struct AssetIdArgs {
 fn approve_asset_cmd(
     state: State<'_, AppState>,
     args: AssetIdArgs,
-) -> Result<AssetDto, CommandError> {
-    approve_asset(store(&state), &args.asset_id).map_err(CommandError::from)
+) -> Result<ApproveAssetResult, CommandError> {
+    let root = media_root(&state)?;
+    approve_asset_with_writeback(store(&state), &args.asset_id, &root).map_err(CommandError::from)
 }
 
 #[derive(Debug, Deserialize)]
@@ -338,6 +346,59 @@ struct ProposeNeedsArgs {
     max_needs: Option<usize>,
     /// Optional brief from Factory “Instrucciones” merged into the chat user message.
     extra_instructions: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ListPackagesArgs {
+    packages_root: Option<String>,
+}
+
+#[tauri::command]
+fn list_packages_cmd(args: Option<ListPackagesArgs>) -> Result<Vec<PackageSummary>, CommandError> {
+    let root = args
+        .as_ref()
+        .and_then(|a| a.packages_root.as_ref())
+        .map(PathBuf::from);
+    list_packages(root.as_deref()).map_err(CommandError::from)
+}
+
+#[derive(Debug, Deserialize)]
+struct PackagePathArgs {
+    package_path: String,
+    max_needs: Option<usize>,
+}
+
+#[tauri::command]
+fn load_package_detail_cmd(args: PackagePathArgs) -> Result<PackageDetail, CommandError> {
+    load_package_detail(PathBuf::from(&args.package_path).as_path()).map_err(CommandError::from)
+}
+
+#[tauri::command]
+fn propose_needs_from_package_cmd(
+    args: PackagePathArgs,
+) -> Result<ProposeNeedsResult, CommandError> {
+    propose_needs_from_package(PathBuf::from(&args.package_path).as_path(), args.max_needs)
+        .map_err(CommandError::from)
+}
+
+#[derive(Debug, Deserialize)]
+struct WritePackageImagesArgs {
+    package_path: String,
+    items: Vec<WritePackageImageItem>,
+}
+
+#[tauri::command]
+fn write_package_images_cmd(
+    state: State<'_, AppState>,
+    args: WritePackageImagesArgs,
+) -> Result<WritePackageImagesResult, CommandError> {
+    let root = media_root(&state)?;
+    write_package_images(
+        PathBuf::from(&args.package_path).as_path(),
+        &root,
+        &args.items,
+    )
+    .map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -577,6 +638,10 @@ pub fn run() {
             get_asset_preview_cmd,
             get_coverage_report_cmd,
             propose_needs_from_script_cmd,
+            list_packages_cmd,
+            load_package_detail_cmd,
+            propose_needs_from_package_cmd,
+            write_package_images_cmd,
             list_image_providers_cmd,
             preview_manual_batch_cmd,
             submit_manual_batch_cmd,

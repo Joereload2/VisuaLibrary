@@ -191,6 +191,38 @@ export function ReviewPage() {
     }
   }
 
+  async function approveSelected(hotkey?: boolean) {
+    if (!selected || busy) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await invokeApproveAsset(selected.id);
+      const tag = hotkey ? " (A)" : "";
+      if (res.package_writeback) {
+        const beats = res.package_writeback.written.map((w) => w.beat_id).join(", ");
+        setMessage(
+          `Aprobado — Library + package${beats ? ` [${beats}]` : ""}.${tag}\n${res.package_writeback.notes}`,
+        );
+      } else if (res.package_writeback_error) {
+        setMessage(
+          `Aprobado — en Library.${tag} Write-back package falló: ${res.package_writeback_error}`,
+        );
+      } else if (selected.package_path && selected.beat_id) {
+        setMessage(
+          `Aprobado — en Library.${tag} (sin write-back; revisa package_path/beat_id)`,
+        );
+      } else {
+        setMessage(`Aprobado — en Library.${tag}`);
+      }
+      await refresh(null);
+    } catch (err) {
+      setError(String((err as { message?: string })?.message ?? err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function selectGroup(gi: number) {
     const g = groups[gi];
     if (!g) return;
@@ -243,10 +275,7 @@ export function ReviewPage() {
 
       if (lower === "a" && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
-        void run(
-          () => invokeApproveAsset(selected.id).then(() => undefined),
-          "Aprobado — en Library. (A)",
-        );
+        void approveSelected(true);
         return;
       }
       if (lower === "r" && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -434,15 +463,12 @@ export function ReviewPage() {
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() =>
-                      void run(
-                        () => invokeApproveAsset(selected.id).then(() => undefined),
-                        "Aprobado — en Library.",
-                      )
-                    }
+                    onClick={() => void approveSelected(false)}
                     style={approveBtn}
                   >
-                    Approve → Library
+                    {selected.package_path && selected.beat_id
+                      ? "Approve → Library + package"
+                      : "Approve → Library"}
                   </button>
                   <button
                     type="button"
@@ -513,6 +539,16 @@ export function ReviewPage() {
                     <p style={metaLine}>
                       <strong>provider:</strong> {selected.provider ?? "—"}
                     </p>
+                    {selected.package_path && selected.beat_id ? (
+                      <p style={{ ...metaLine, color: "var(--accent)" }}>
+                        <strong>package:</strong> beat <code>{selected.beat_id}</code>
+                        {selected.package_id ? ` · ${selected.package_id}` : null}
+                        <br />
+                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                          Approve escribe a media/images/
+                        </span>
+                      </p>
+                    ) : null}
                     {selected.prompt ? (
                       <p style={{ ...metaLine, fontSize: "0.8rem", color: "var(--text-muted)" }}>
                         <strong>prompt:</strong> {selected.prompt.slice(0, 200)}
